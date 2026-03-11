@@ -112,8 +112,9 @@ auth = "oauth2"
 Manage config from the CLI:
 
 ```bash
-# Update a single value
+# Set individual values
 trinops config set server trino.example.com:443
+trinops config set user myuser
 trinops config set query_limit 100
 
 # Configure a named profile
