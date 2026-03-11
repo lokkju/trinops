@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from trinops.backend import QueryBackend, SqlQueryBackend
+from trinops.backend import QueryBackend, HttpQueryBackend, SqlQueryBackend
 from trinops.config import ConnectionProfile
 from trinops.models import QueryInfo
 
@@ -14,9 +14,15 @@ class TrinopsClient:
         self._backend = backend
 
     @classmethod
-    def from_profile(cls, profile: ConnectionProfile) -> TrinopsClient:
-        backend = SqlQueryBackend(profile)
-        return cls(backend=backend)
+    def from_profile(cls, profile: ConnectionProfile, backend: str = "http") -> TrinopsClient:
+        if backend == "sql":
+            return cls(backend=SqlQueryBackend(profile))
+        return cls(backend=HttpQueryBackend(profile))
+
+    def check_connection(self) -> None:
+        """Verify connectivity and auth. Raises ConnectionError on failure."""
+        if hasattr(self._backend, "check_connection"):
+            self._backend.check_connection()
 
     def list_queries(self, state: Optional[str] = None) -> list[QueryInfo]:
         return self._backend.list_queries(state=state)

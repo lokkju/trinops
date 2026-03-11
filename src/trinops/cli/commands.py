@@ -7,30 +7,64 @@ import typer
 from trinops.client import TrinopsClient
 from trinops.config import ConnectionProfile, load_config
 
-app = typer.Typer(name="trinops", help="Trino query monitoring tool")
+app = typer.Typer(name="trinops", help="Trino query monitoring tool", invoke_without_command=True)
+
+
+@app.callback()
+def main(ctx: typer.Context):
+    """Trino query monitoring tool."""
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
 
 
 def _build_profile(
     server: Optional[str] = None,
     profile: Optional[str] = None,
     user: Optional[str] = None,
+    auth: Optional[str] = None,
 ) -> ConnectionProfile:
     config = load_config()
     if server:
-        return ConnectionProfile(server=server, auth="none", user=user or "trinops")
+        return ConnectionProfile(
+            server=server,
+            auth=auth or "none",
+            user=user or "trinops",
+        )
     env_profile = ConnectionProfile.from_env()
     if env_profile is not None:
         return env_profile
-    return config.get_profile(profile)
+    cp = config.get_profile(profile)
+    if auth is not None:
+        cp.auth = auth
+    if user is not None:
+        cp.user = user
+    if cp.server is None:
+        typer.echo(
+            "No Trino server configured. Use one of:\n"
+            "  --server host:port\n"
+            "  TRINOPS_SERVER=host:port environment variable\n"
+            "  trinops config init",
+            err=True,
+        )
+        raise typer.Exit(1)
+    return cp
 
 
 def _build_client(
     server: Optional[str] = None,
     profile: Optional[str] = None,
     user: Optional[str] = None,
+    auth: Optional[str] = None,
+    backend: str = "http",
 ) -> TrinopsClient:
-    cp = _build_profile(server=server, profile=profile, user=user)
-    return TrinopsClient.from_profile(cp)
+    cp = _build_profile(server=server, profile=profile, user=user, auth=auth)
+    client = TrinopsClient.from_profile(cp, backend=backend)
+    try:
+        client.check_connection()
+    except ConnectionError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+    return client
 
 
 @app.command()
@@ -38,11 +72,13 @@ def queries(
     server: Optional[str] = typer.Option(None, help="Trino server host:port"),
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
     user: Optional[str] = typer.Option(None, help="Trino user"),
+    auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
     state: Optional[str] = typer.Option(None, help="Filter by query state"),
     json: bool = typer.Option(False, "--json", help="JSON output"),
+    backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """List running and recent queries."""
-    client = _build_client(server=server, profile=profile, user=user)
+    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend)
     results = client.list_queries(state=state)
 
     if json:
@@ -59,11 +95,12 @@ def query(
     server: Optional[str] = typer.Option(None, help="Trino server host:port"),
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
     user: Optional[str] = typer.Option(None, help="Trino user"),
+    auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
     json: bool = typer.Option(False, "--json", help="JSON output"),
-    watch: bool = typer.Option(False, "--watch", help="Poll until query finishes"),
+    backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """Show details for a specific query."""
-    client = _build_client(server=server, profile=profile, user=user)
+    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend)
     qi = client.get_query(query_id)
 
     if qi is None:
@@ -83,12 +120,22 @@ def tui(
     server: Optional[str] = typer.Option(None, help="Trino server host:port"),
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
     user: Optional[str] = typer.Option(None, help="Trino user"),
+    auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
     interval: float = typer.Option(1.0, help="Refresh interval in seconds"),
+    backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """Launch interactive TUI dashboard."""
     from trinops.tui.app import TrinopsApp
 
-    cp = _build_profile(server=server, profile=profile, user=user)
+    cp = _build_profile(server=server, profile=profile, user=user, auth=auth)
+    # Verify connection before launching TUI
+    client = TrinopsClient.from_profile(cp, backend=backend)
+    try:
+        client.check_connection()
+    except ConnectionError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+    client.close()
     tui_app = TrinopsApp(profile=cp, interval=interval)
     tui_app.run()
 
@@ -98,10 +145,12 @@ def top(
     server: Optional[str] = typer.Option(None, help="Trino server host:port"),
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
     user: Optional[str] = typer.Option(None, help="Trino user"),
+    auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
     interval: float = typer.Option(1.0, help="Refresh interval in seconds"),
+    backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """Launch interactive TUI dashboard (alias for tui)."""
-    tui(server=server, profile=profile, user=user, interval=interval)
+    tui(server=server, profile=profile, user=user, auth=auth, interval=interval, backend=backend)
 
 
 mcp_app = typer.Typer(name="mcp", help="MCP server")
@@ -117,11 +166,13 @@ def mcp_serve(
     server: Optional[str] = typer.Option(None, help="Trino server host:port"),
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
     user: Optional[str] = typer.Option(None, help="Trino user"),
+    auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
+    backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """Start MCP server on stdio."""
     from trinops.mcp.server import run_stdio_server
 
-    client = _build_client(server=server, profile=profile, user=user)
+    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend)
     run_stdio_server(client)
 
 
