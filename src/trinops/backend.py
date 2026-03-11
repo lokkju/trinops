@@ -73,7 +73,7 @@ class SqlQueryBackend:
     def _get_connection(self):
         if self._conn is None:
             host, _, port_str = self._profile.server.partition(":")
-            port = int(port_str) if port_str else (443 if self._profile.scheme == "https" else 80)
+            port = int(port_str) if port_str else (443 if self._profile.scheme == "https" else 8080)
             auth = build_auth(self._profile)
             self._conn = trino.dbapi.connect(
                 host=host,
@@ -175,7 +175,7 @@ class HttpQueryBackend:
     def __init__(self, profile: ConnectionProfile) -> None:
         self._profile = profile
         host, _, port_str = profile.server.partition(":")
-        port = int(port_str) if port_str else (443 if profile.scheme == "https" else 80)
+        port = int(port_str) if port_str else (443 if profile.scheme == "https" else 8080)
         self._base_url = f"{profile.scheme}://{host}:{port}"
         self._session = None  # requests.Session, used for oauth2/kerberos
         self._headers = self._build_auth(profile)

@@ -38,13 +38,13 @@ trinops config init --server trino.example.com:443 --user myuser --auth basic
 Or pass the server directly:
 
 ```bash
-trinops queries --server trino.example.com:443
+trinops queries --server trino.example.com
 ```
 
 Or set environment variables:
 
 ```bash
-export TRINOPS_SERVER=trino.example.com:443
+export TRINOPS_SERVER=trino.example.com
 export TRINOPS_USER=myuser
 export TRINOPS_AUTH=basic
 ```
@@ -98,7 +98,7 @@ Config file lives at `~/.config/trinops/config.toml`:
 
 ```toml
 [default]
-server = "trino.example.com:443"
+server = "trino.example.com"
 scheme = "https"
 user = "myuser"
 auth = "none"
@@ -113,7 +113,7 @@ Manage config from the CLI:
 
 ```bash
 # Set individual values
-trinops config set server trino.example.com:443
+trinops config set server trino.example.com
 trinops config set user myuser
 trinops config set query_limit 100
 

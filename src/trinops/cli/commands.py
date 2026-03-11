@@ -302,7 +302,7 @@ def config_init(
         typer.confirm(f"{path} already exists. Overwrite?", abort=True)
 
     if server is None:
-        server = typer.prompt("Trino server (host:port)")
+        server = typer.prompt("Trino server (host or host:port)")
     if scheme is None:
         scheme = typer.prompt("Scheme", default="https")
     if user is None:
