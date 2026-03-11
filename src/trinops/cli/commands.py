@@ -78,6 +78,32 @@ def query(
         print_query_detail(qi)
 
 
+@app.command()
+def tui(
+    server: Optional[str] = typer.Option(None, help="Trino server host:port"),
+    profile: Optional[str] = typer.Option(None, help="Config profile name"),
+    user: Optional[str] = typer.Option(None, help="Trino user"),
+    interval: float = typer.Option(1.0, help="Refresh interval in seconds"),
+):
+    """Launch interactive TUI dashboard."""
+    from trinops.tui.app import TrinopsApp
+
+    cp = _build_profile(server=server, profile=profile, user=user)
+    tui_app = TrinopsApp(profile=cp, interval=interval)
+    tui_app.run()
+
+
+@app.command()
+def top(
+    server: Optional[str] = typer.Option(None, help="Trino server host:port"),
+    profile: Optional[str] = typer.Option(None, help="Config profile name"),
+    user: Optional[str] = typer.Option(None, help="Trino user"),
+    interval: float = typer.Option(1.0, help="Refresh interval in seconds"),
+):
+    """Launch interactive TUI dashboard (alias for tui)."""
+    tui(server=server, profile=profile, user=user, interval=interval)
+
+
 config_app = typer.Typer(name="config", help="Manage trinops configuration")
 auth_app = typer.Typer(name="auth", help="Manage authentication")
 app.add_typer(config_app, name="config")

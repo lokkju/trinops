@@ -1,1 +1,1 @@
-"""TUI dashboard module for trinops."""
+"""trinops TUI dashboard."""
