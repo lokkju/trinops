@@ -898,6 +898,15 @@ wheels = [
 ]
 
 [[package]]
+name = "tomlkit"
+version = "0.14.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c3/af/14b24e41977adb296d6bd1fb59402cf7d60ce364f90c890bd2ec65c43b5a/tomlkit-0.14.0.tar.gz", hash = "sha256:cf00efca415dbd57575befb1f6634c4f42d2d87dbba376128adb42c121b87064", size = 187167, upload-time = "2026-01-13T01:14:53.304Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b5/11/87d6d29fb5d237229d67973a6c9e06e048f01cf4994dee194ab0ea841814/tomlkit-0.14.0-py3-none-any.whl", hash = "sha256:592064ed85b40fa213469f81ac584f67a4f2992509a7c3ea2d632208623a3680", size = 39310, upload-time = "2026-01-13T01:14:51.965Z" },
+]
+
+[[package]]
 name = "tqdm"
 version = "4.67.3"
 source = { registry = "https://pypi.org/simple" }
@@ -934,7 +943,7 @@ dependencies = [
     { name = "keyring" },
     { name = "rich" },
     { name = "textual" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "tomlkit" },
     { name = "trino" },
     { name = "typer" },
 ]
@@ -956,7 +965,7 @@ requires-dist = [
     { name = "keyring", specifier = ">=23.0" },
     { name = "rich", specifier = ">=13.0" },
     { name = "textual", specifier = ">=0.40" },
-    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=1.0" },
+    { name = "tomlkit", specifier = ">=0.12" },
     { name = "tqdm", marker = "extra == 'tqdm'", specifier = ">=4.60" },
     { name = "trino", specifier = ">=0.320" },
     { name = "typer", specifier = ">=0.9" },

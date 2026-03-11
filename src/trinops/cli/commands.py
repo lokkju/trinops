@@ -242,6 +242,7 @@ app.add_typer(auth_app, name="auth")
 @config_app.command("show")
 def config_show(
     config_path: Optional[str] = typer.Option(None, "--config-path", help="Config file path"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Show a specific profile"),
 ):
     """Show current configuration."""
     from trinops.config import load_config, DEFAULT_CONFIG_PATH
@@ -254,35 +255,104 @@ def config_show(
 
     config = load_config(path)
     typer.echo(f"Config: {path}")
-    typer.echo(f"Default server: {config.default.server}")
-    typer.echo(f"Default user: {config.default.user}")
-    typer.echo(f"Default auth: {config.default.auth}")
-    if config.profiles:
+
+    if profile:
+        try:
+            cp = config.get_profile(profile)
+        except KeyError:
+            typer.echo(f"Unknown profile: {profile}", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"Profile: {profile}")
+    else:
+        cp = config.default
+        typer.echo("Profile: default")
+
+    typer.echo(f"  server: {cp.server}")
+    typer.echo(f"  scheme: {cp.scheme}")
+    typer.echo(f"  user: {cp.user}")
+    typer.echo(f"  auth: {cp.auth}")
+    if cp.catalog:
+        typer.echo(f"  catalog: {cp.catalog}")
+    if cp.schema:
+        typer.echo(f"  schema: {cp.schema}")
+    typer.echo(f"  query_limit: {cp.query_limit}")
+
+    if not profile and config.profiles:
         typer.echo(f"Profiles: {', '.join(config.profiles.keys())}")
 
 
 @config_app.command("init")
 def config_init(
     config_path: Optional[str] = typer.Option(None, "--config-path", help="Config file path"),
+    server: Optional[str] = typer.Option(None, "--server", help="Trino server host:port"),
+    scheme: Optional[str] = typer.Option(None, "--scheme", help="Connection scheme (http/https)"),
+    user: Optional[str] = typer.Option(None, "--user", help="Trino user"),
+    auth: Optional[str] = typer.Option(None, "--auth", help="Auth method (none/basic/jwt/oauth2/kerberos)"),
+    catalog: Optional[str] = typer.Option(None, "--catalog", help="Default catalog"),
+    schema: Optional[str] = typer.Option(None, "--schema", help="Default schema"),
+    query_limit: Optional[int] = typer.Option(None, "--query-limit", help="Default query limit"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Overwrite without confirmation"),
 ):
-    """Create a new config file interactively."""
-    from trinops.config import DEFAULT_CONFIG_PATH
+    """Create or overwrite config file. Prompts for missing values unless all required options are provided."""
+    from trinops.config import DEFAULT_CONFIG_PATH, save_config
     from pathlib import Path
 
     path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
-    if path.exists():
+    if path.exists() and not yes:
         typer.confirm(f"{path} already exists. Overwrite?", abort=True)
 
-    server = typer.prompt("Trino server (host:port)")
-    scheme = typer.prompt("Scheme", default="https")
-    user = typer.prompt("User")
-    auth = typer.prompt("Auth method (none/basic/jwt/oauth2/kerberos)", default="none")
+    if server is None:
+        server = typer.prompt("Trino server (host:port)")
+    if scheme is None:
+        scheme = typer.prompt("Scheme", default="https")
+    if user is None:
+        user = typer.prompt("User")
+    if auth is None:
+        auth = typer.prompt("Auth method (none/basic/jwt/oauth2/kerberos)", default="none")
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        f.write(f'[default]\nserver = "{server}"\nscheme = "{scheme}"\nuser = "{user}"\nauth = "{auth}"\n')
+    values: dict = {"server": server, "scheme": scheme, "user": user, "auth": auth}
+    if catalog is not None:
+        values["catalog"] = catalog
+    if schema is not None:
+        values["schema"] = schema
+    if query_limit is not None:
+        values["query_limit"] = query_limit
 
+    save_config(path, "default", values)
     typer.echo(f"Config written to {path}")
+
+
+@config_app.command("set")
+def config_set(
+    key: str = typer.Argument(help="Config key to set (e.g. server, auth, query_limit)"),
+    value: str = typer.Argument(help="Value to set"),
+    config_path: Optional[str] = typer.Option(None, "--config-path", help="Config file path"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile to update (default: default)"),
+):
+    """Set a single config value."""
+    from trinops.config import DEFAULT_CONFIG_PATH, save_config, ConnectionProfile
+    from dataclasses import fields as dc_fields
+    from pathlib import Path
+
+    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    section = profile or "default"
+
+    known = {f.name for f in dc_fields(ConnectionProfile)}
+    if key not in known:
+        typer.echo(f"Unknown config key: {key}", err=True)
+        typer.echo(f"Valid keys: {', '.join(sorted(known))}", err=True)
+        raise typer.Exit(1)
+
+    # Coerce to the right type
+    field_type = {f.name: f.type for f in dc_fields(ConnectionProfile)}[key]
+    if field_type == "int":
+        typed_value: object = int(value)
+    else:
+        typed_value = value
+
+    save_config(path, section, {key: typed_value})
+    label = f"profiles.{section}" if section != "default" else "default"
+    typer.echo(f"Set {label}.{key} = {typed_value}")
 
 
 @auth_app.command("status")

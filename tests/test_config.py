@@ -1,7 +1,7 @@
 import os
 import tempfile
 
-from trinops.config import TrinopsConfig, load_config, ConnectionProfile
+from trinops.config import TrinopsConfig, load_config, save_config, ConnectionProfile
 
 
 SAMPLE_CONFIG = """\
@@ -113,3 +113,49 @@ def test_profile_merge_env_over_file():
 
     profile = config.get_profile(None)
     assert profile.user == "loki"  # from file
+
+
+def test_save_config_creates_new_file(tmp_path):
+    path = tmp_path / "config.toml"
+    save_config(path, "default", {"server": "trino:8080", "user": "testuser"})
+
+    config = load_config(path)
+    assert config.default.server == "trino:8080"
+    assert config.default.user == "testuser"
+
+
+def test_save_config_updates_existing(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(SAMPLE_CONFIG)
+
+    save_config(path, "default", {"user": "newuser"})
+
+    config = load_config(path)
+    assert config.default.user == "newuser"
+    assert config.default.server == "trino.example.com:8080"  # preserved
+
+
+def test_save_config_creates_profile(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(SAMPLE_CONFIG)
+
+    save_config(path, "prod", {"server": "trino-prod:443", "auth": "oauth2"})
+
+    config = load_config(path)
+    prod = config.get_profile("prod")
+    assert prod.server == "trino-prod:443"
+    assert prod.auth == "oauth2"
+    # existing profiles preserved
+    assert config.get_profile("staging").server == "trino-staging.example.com:8080"
+
+
+def test_save_config_updates_existing_profile(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(SAMPLE_CONFIG)
+
+    save_config(path, "staging", {"auth": "jwt"})
+
+    config = load_config(path)
+    staging = config.get_profile("staging")
+    assert staging.auth == "jwt"
+    assert staging.server == "trino-staging.example.com:8080"  # preserved

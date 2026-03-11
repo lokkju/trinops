@@ -3,18 +3,11 @@
 from __future__ import annotations
 
 import os
-import sys
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Optional
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    try:
-        import tomllib
-    except ImportError:
-        import tomli as tomllib
+import tomlkit
 
 
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "trinops" / "config.toml"
@@ -72,8 +65,8 @@ def load_config(path: str | Path | None = None) -> TrinopsConfig:
     if not config_path.exists():
         return TrinopsConfig()
 
-    with open(config_path, "rb") as f:
-        data = tomllib.load(f)
+    with open(config_path, "r") as f:
+        data = tomlkit.load(f)
 
     default = ConnectionProfile.from_dict(data.get("default", {}))
     profiles = {}
@@ -81,3 +74,42 @@ def load_config(path: str | Path | None = None) -> TrinopsConfig:
         profiles[name] = ConnectionProfile.from_dict(profile_data)
 
     return TrinopsConfig(default=default, profiles=profiles)
+
+
+def _load_toml_doc(path: Path) -> tomlkit.TOMLDocument:
+    """Load existing TOML document or create empty one."""
+    if path.exists():
+        with open(path, "r") as f:
+            return tomlkit.load(f)
+    return tomlkit.document()
+
+
+def save_config(
+    path: Path,
+    section: str,
+    values: dict,
+) -> None:
+    """Set values in a config section, preserving existing content.
+
+    section is 'default' or a profile name (stored under [profiles.<name>]).
+    """
+    doc = _load_toml_doc(path)
+
+    if section == "default":
+        if "default" not in doc:
+            doc.add("default", tomlkit.table())
+        target = doc["default"]
+    else:
+        if "profiles" not in doc:
+            doc.add("profiles", tomlkit.table())
+        profiles = doc["profiles"]
+        if section not in profiles:
+            profiles.add(section, tomlkit.table())
+        target = profiles[section]
+
+    for key, value in values.items():
+        target[key] = value
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        tomlkit.dump(doc, f)

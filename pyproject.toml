@@ -29,7 +29,7 @@ classifiers = [
 ]
 dependencies = [
     "trino>=0.320",
-    "tomli>=1.0; python_version < '3.11'",
+    "tomlkit>=0.12",
     "keyring>=23.0",
     "typer>=0.9",
     "rich>=13.0",

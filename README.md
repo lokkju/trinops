@@ -25,10 +25,14 @@ pip install trinops[tqdm]
 
 ## Quick Start
 
-Configure your Trino connection:
+Configure your Trino connection interactively or with flags:
 
 ```bash
+# Interactive prompts
 trinops config init
+
+# Non-interactive
+trinops config init --server trino.example.com:443 --user myuser --auth basic
 ```
 
 Or pass the server directly:
@@ -105,6 +109,22 @@ server = "trino-prod.example.com:443"
 auth = "oauth2"
 ```
 
+Manage config from the CLI:
+
+```bash
+# Update a single value
+trinops config set server trino.example.com:443
+trinops config set query_limit 100
+
+# Configure a named profile
+trinops config set server trino-prod:443 --profile prod
+trinops config set auth oauth2 --profile prod
+
+# View current config
+trinops config show
+trinops config show --profile prod
+```
+
 ### Authentication
 
 Supported methods: `none`, `basic`, `jwt`, `oauth2`, `kerberos`.
@@ -148,6 +168,19 @@ with TrinoProgress(conn, query_id="20260310_143549_08022_abc") as tp:
 trinops ships with a [Claude Code skill](skills/trinops/SKILL.md) that teaches Claude how to query and inspect Trino cluster activity. If you have trinops installed in a project, Claude can use `trinops queries --select` and `trinops query <id> --select` to investigate query performance, find long-running queries, and diagnose failures with minimal context usage.
 
 A [Claude Code plugin](/.claude-plugin/plugin.json) is also included for marketplace discoverability.
+
+## Roadmap
+
+Planned features, roughly in priority order:
+
+- **Kill query support** — cancel running queries from CLI and TUI, gated behind a config setting ([#1](https://github.com/lokkju/trinops/issues/1))
+- **Enriched TUI detail** — tabbed query detail view with stats, stages, plan, and table access info ([#2](https://github.com/lokkju/trinops/issues/2))
+- **Query plan visualization** — render the stage tree from the REST API in both CLI and TUI ([#5](https://github.com/lokkju/trinops/issues/5))
+- **Schema cache and search** — cache catalog metadata locally and search across tables/columns ([#3](https://github.com/lokkju/trinops/issues/3))
+- **MCP server** — Model Context Protocol server for AI assistant integration ([#4](https://github.com/lokkju/trinops/issues/4))
+- **Multi-cluster support** — switch between profiles in the TUI, unified multi-cluster view ([#6](https://github.com/lokkju/trinops/issues/6))
+- **Notifications and alerts** — desktop notifications and webhooks for long-running queries and failures ([#7](https://github.com/lokkju/trinops/issues/7))
+- **Worker/node health** — cluster node monitoring via `/v1/node` ([#8](https://github.com/lokkju/trinops/issues/8))
 
 ## Requirements
 
