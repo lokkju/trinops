@@ -1,10 +1,10 @@
 {
   "name": "trinops",
   "description": "Claude Code integration for trinops, a Trino query monitoring CLI. Teaches Claude how to query and inspect Trino cluster activity.",
-  "version": "0.1.0",
+  "version": "0.0.0-dev",
   "author": {
     "name": "lokkju"
   },
-  "repository": "lokkju/trino-progress",
+  "repository": "lokkju/trinops",
   "license": "Apache-2.0"
 }
