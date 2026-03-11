@@ -46,12 +46,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
-      - name: Stamp plugin version
-        run: |
-          VERSION=$(git describe --tags --match 'v*' 2>/dev/null || echo "0.0.0-dev")
-          VERSION=${VERSION#v}
-          sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" .claude-plugin/plugin.json
-
       - name: Build
         run: uv build
 
