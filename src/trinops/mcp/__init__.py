@@ -1,1 +1,1 @@
-"""MCP server module for trinops."""
+"""trinops MCP server."""

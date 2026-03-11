@@ -104,10 +104,25 @@ def top(
     tui(server=server, profile=profile, user=user, interval=interval)
 
 
+mcp_app = typer.Typer(name="mcp", help="MCP server")
 config_app = typer.Typer(name="config", help="Manage trinops configuration")
 auth_app = typer.Typer(name="auth", help="Manage authentication")
+app.add_typer(mcp_app, name="mcp")
 app.add_typer(config_app, name="config")
 app.add_typer(auth_app, name="auth")
+
+
+@mcp_app.command("serve")
+def mcp_serve(
+    server: Optional[str] = typer.Option(None, help="Trino server host:port"),
+    profile: Optional[str] = typer.Option(None, help="Config profile name"),
+    user: Optional[str] = typer.Option(None, help="Trino user"),
+):
+    """Start MCP server on stdio."""
+    from trinops.mcp.server import run_stdio_server
+
+    client = _build_client(server=server, profile=profile, user=user)
+    run_stdio_server(client)
 
 
 @config_app.command("show")
