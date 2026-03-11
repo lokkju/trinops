@@ -76,3 +76,100 @@ def query(
     else:
         from trinops.cli.formatting import print_query_detail
         print_query_detail(qi)
+
+
+config_app = typer.Typer(name="config", help="Manage trinops configuration")
+auth_app = typer.Typer(name="auth", help="Manage authentication")
+app.add_typer(config_app, name="config")
+app.add_typer(auth_app, name="auth")
+
+
+@config_app.command("show")
+def config_show(
+    config_path: Optional[str] = typer.Option(None, "--config-path", help="Config file path"),
+):
+    """Show current configuration."""
+    from trinops.config import load_config, DEFAULT_CONFIG_PATH
+    from pathlib import Path
+
+    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    if not path.exists():
+        typer.echo(f"No config file found at {path}")
+        return
+
+    config = load_config(path)
+    typer.echo(f"Config: {path}")
+    typer.echo(f"Default server: {config.default.server}")
+    typer.echo(f"Default user: {config.default.user}")
+    typer.echo(f"Default auth: {config.default.auth}")
+    if config.profiles:
+        typer.echo(f"Profiles: {', '.join(config.profiles.keys())}")
+
+
+@config_app.command("init")
+def config_init(
+    config_path: Optional[str] = typer.Option(None, "--config-path", help="Config file path"),
+):
+    """Create a new config file interactively."""
+    from trinops.config import DEFAULT_CONFIG_PATH
+    from pathlib import Path
+
+    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    if path.exists():
+        typer.confirm(f"{path} already exists. Overwrite?", abort=True)
+
+    server = typer.prompt("Trino server (host:port)")
+    scheme = typer.prompt("Scheme", default="https")
+    user = typer.prompt("User")
+    auth = typer.prompt("Auth method (none/basic/jwt/oauth2/kerberos)", default="none")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        f.write(f'[default]\nserver = "{server}"\nscheme = "{scheme}"\nuser = "{user}"\nauth = "{auth}"\n')
+
+    typer.echo(f"Config written to {path}")
+
+
+@auth_app.command("status")
+def auth_status(
+    config_path: Optional[str] = typer.Option(None, "--config-path", help="Config file path"),
+    profile: Optional[str] = typer.Option(None, help="Config profile name"),
+):
+    """Show current authentication state."""
+    from trinops.config import load_config
+    from pathlib import Path
+
+    path = Path(config_path) if config_path else None
+    config = load_config(path)
+    cp = config.get_profile(profile)
+    typer.echo(f"Auth method: {cp.auth}")
+    typer.echo(f"User: {cp.user}")
+    if cp.auth == "oauth2":
+        token_path = Path.home() / ".config" / "trinops" / "tokens"
+        if token_path.exists():
+            typer.echo("OAuth2 tokens cached: yes")
+        else:
+            typer.echo("OAuth2 tokens cached: no (run 'trinops auth login')")
+
+
+@auth_app.command("login")
+def auth_login(
+    config_path: Optional[str] = typer.Option(None, "--config-path", help="Config file path"),
+    profile: Optional[str] = typer.Option(None, help="Config profile name"),
+):
+    """Run OAuth2 authentication flow and cache token."""
+    from trinops.config import load_config
+    from trinops.auth import build_auth
+    from pathlib import Path
+
+    path = Path(config_path) if config_path else None
+    config = load_config(path)
+    cp = config.get_profile(profile)
+
+    if cp.auth != "oauth2":
+        typer.echo(f"Profile uses auth method '{cp.auth}', not oauth2")
+        raise typer.Exit(1)
+
+    typer.echo("Starting OAuth2 flow...")
+    auth = build_auth(cp)
+    typer.echo("Authentication successful. Token cached.")
