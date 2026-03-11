@@ -172,16 +172,13 @@ class SqlQueryBackend:
 class HttpQueryBackend:
     """Queries Trino REST API directly via /v1/query endpoints."""
 
-    def __init__(self, profile: ConnectionProfile, cache_ttl: float = 30.0) -> None:
+    def __init__(self, profile: ConnectionProfile) -> None:
         self._profile = profile
         host, _, port_str = profile.server.partition(":")
         port = int(port_str) if port_str else (443 if profile.scheme == "https" else 80)
         self._base_url = f"{profile.scheme}://{host}:{port}"
         self._session = None  # requests.Session, used for oauth2/kerberos
         self._headers = self._build_auth(profile)
-        self._cache_ttl = cache_ttl
-        self._list_cache: Optional[list] = None
-        self._list_cache_time: float = 0.0
 
     def _build_auth(self, profile: ConnectionProfile) -> dict[str, str]:
         """Build auth headers, or configure a requests.Session for complex auth."""
@@ -254,34 +251,17 @@ class HttpQueryBackend:
             return data
 
     def _get_all_queries_raw(self, state: Optional[str] = None) -> list:
-        """Fetch /v1/query with short-lived cache to avoid re-downloading 40+ MB every refresh."""
-        now = time.monotonic()
-        if self._list_cache is not None and (now - self._list_cache_time) < self._cache_ttl:
-            _log.debug("list_queries: using cached data (age=%.1fs)", now - self._list_cache_time)
-            return self._list_cache
-
+        """Fetch /v1/query."""
         path = "/v1/query"
         if state is not None:
             from urllib.parse import quote
             path += f"?state={quote(state)}"
-        data = self._get_json_light(path)
-        self._list_cache = data
-        self._list_cache_time = time.monotonic()
-        return data
+        return self._get_json_light(path)
 
     def _get_json_light(self, path: str):
-        """Fetch JSON for list view, truncating query text to save memory.
-
-        The /v1/query endpoint returns ~45 MB for 10K queries; most of that is
-        full SQL text. We truncate it after parsing since orjson is faster than
-        any byte-level preprocessing. This cuts cached memory from ~45 MB to ~5 MB.
-        """
-        data = self._get_json(path)
-        for item in data:
-            q = item.get("query")
-            if q and len(q) > _QUERY_PREVIEW_LEN:
-                item["query"] = q[:_QUERY_PREVIEW_LEN]
-        return data
+        """Fetch JSON for list view. Full query text is preserved so detail
+        views can display it without a second round-trip."""
+        return self._get_json(path)
 
     def list_queries(self, state: Optional[str] = None, limit: int = 0, query_user: Optional[str] = None) -> list[QueryInfo]:
         t0 = time.monotonic()
@@ -290,23 +270,30 @@ class HttpQueryBackend:
         if query_user is not None:
             data = [item for item in data if item.get("session", {}).get("user") == query_user]
         t_filter = time.monotonic()
-        items = data[:limit] if limit > 0 else data
-        result = [QueryInfo.from_rest_response(item) for item in items]
+        result = [QueryInfo.from_rest_response(item) for item in data]
+        result.sort(key=lambda qi: qi.created, reverse=True)
+        if limit > 0:
+            result = result[:limit]
         t_parse = time.monotonic()
         _log.debug("list_queries: fetch=%.3fs filter=%.3fs parse(%d items)=%.3fs total=%.3fs",
-                   t_fetch - t0, t_filter - t_fetch, len(items), t_parse - t_filter, t_parse - t0)
+                   t_fetch - t0, t_filter - t_fetch, len(result), t_parse - t_filter, t_parse - t0)
         return result
 
     def get_query(self, query_id: str) -> Optional[QueryInfo]:
+        raw = self.get_query_raw(query_id)
+        if raw is None:
+            return None
+        return QueryInfo.from_rest_response(raw)
+
+    def get_query_raw(self, query_id: str) -> Optional[dict]:
+        """Return raw REST API response for a single query."""
         try:
-            data = self._get_json(f"/v1/query/{query_id}")
-            return QueryInfo.from_rest_response(data)
+            return self._get_json(f"/v1/query/{query_id}")
         except HTTPError as e:
             if e.code in (404, 410):
                 return None
             raise
         except Exception as e:
-            # requests raises different exceptions than urllib
             if self._session is not None and hasattr(e, "response"):
                 if e.response is not None and e.response.status_code in (404, 410):
                     return None

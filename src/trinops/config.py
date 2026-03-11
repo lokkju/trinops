@@ -31,6 +31,7 @@ class ConnectionProfile:
     password: Optional[str] = None
     password_cmd: Optional[str] = None
     jwt_token: Optional[str] = None
+    query_limit: int = 50
 
     @classmethod
     def from_dict(cls, data: dict) -> ConnectionProfile:

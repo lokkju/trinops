@@ -39,5 +39,11 @@ class TrinopsClient:
     def get_query(self, query_id: str) -> Optional[QueryInfo]:
         return self._backend.get_query(query_id)
 
+    def get_query_raw(self, query_id: str) -> Optional[dict]:
+        """Return raw REST API response for a single query (HTTP backend only)."""
+        if hasattr(self._backend, "get_query_raw"):
+            return self._backend.get_query_raw(query_id)
+        return None
+
     def close(self) -> None:
         self._backend.close()

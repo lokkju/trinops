@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json as _json
+import sys
 from contextlib import contextmanager
 from typing import Optional
 
@@ -14,8 +16,11 @@ _console = Console(stderr=True)
 
 @contextmanager
 def _status(message: str):
-    """Show a spinner on stderr while work is in progress."""
-    with _console.status(message):
+    """Show a spinner on stderr while work is in progress. Skip when piped."""
+    if sys.stdout.isatty():
+        with _console.status(message):
+            yield
+    else:
         yield
 
 app = typer.Typer(name="trinops", help="Trino query monitoring tool", invoke_without_command=True)
@@ -87,6 +92,33 @@ def _build_client(
     return client
 
 
+def _select_fields(data: dict, select: str) -> dict:
+    """Extract dot-separated field paths from a dict.
+
+    Example: _select_fields(d, "queryId,queryStats.elapsedTime")
+    """
+    result = {}
+    for path in select.split(","):
+        path = path.strip()
+        if not path:
+            continue
+        parts = path.split(".")
+        # Walk the source
+        src = data
+        for part in parts:
+            if isinstance(src, dict):
+                src = src.get(part)
+            else:
+                src = None
+                break
+        # Build nested output
+        target = result
+        for part in parts[:-1]:
+            target = target.setdefault(part, {})
+        target[parts[-1]] = src
+    return result
+
+
 @app.command()
 def queries(
     server: Optional[str] = typer.Option(None, help="Trino server host:port"),
@@ -98,6 +130,7 @@ def queries(
     limit: int = typer.Option(25, "--limit", "-n", help="Max queries per page (0 for all)"),
     page: int = typer.Option(1, "--page", "-p", help="Page number (1-based)"),
     json: bool = typer.Option(False, "--json", help="JSON output"),
+    select: Optional[str] = typer.Option(None, "--select", "-s", help="Comma-separated fields for JSON (e.g. query_id,state,user)"),
     backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """List running and recent queries."""
@@ -112,9 +145,13 @@ def queries(
             if limit > 0:
                 start = (page - 1) * limit
                 results = results[start : start + limit]
-            if json:
-                from trinops.cli.formatting import print_queries_json
-                print_queries_json(results)
+            if json or select:
+                import dataclasses
+                items = [dataclasses.asdict(q) for q in results]
+                if select:
+                    items = [_select_fields(item, select) for item in items]
+                sys.stdout.write(_json.dumps(items, default=str))
+                sys.stdout.write("\n")
             else:
                 from trinops.cli.formatting import print_queries_table
                 print_queries_table(results)
@@ -134,22 +171,29 @@ def query(
     user: Optional[str] = typer.Option(None, help="Trino user"),
     auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
     json: bool = typer.Option(False, "--json", help="JSON output"),
+    select: Optional[str] = typer.Option(None, "--select", "-s", help="Comma-separated fields to include in JSON (e.g. queryId,state,queryStats.elapsedTime)"),
     backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """Show details for a specific query."""
     client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend)
     try:
         with _status("Loading..."):
-            qi = client.get_query(query_id)
-            if qi is None:
-                typer.echo(f"Query not found: {query_id}", err=True)
-                raise typer.Exit(1)
-            if json:
-                from trinops.cli.formatting import print_query_json
-                print_query_json(qi)
+            if json or select:
+                raw = client.get_query_raw(query_id)
+                if raw is None:
+                    typer.echo(f"Query not found: {query_id}", err=True)
+                    raise typer.Exit(1)
+                if select:
+                    raw = _select_fields(raw, select)
+                sys.stdout.write(_json.dumps(raw, default=str))
+                sys.stdout.write("\n")
             else:
-                from trinops.cli.formatting import print_query_detail
-                print_query_detail(qi)
+                raw = client.get_query_raw(query_id)
+                if raw is None:
+                    typer.echo(f"Query not found: {query_id}", err=True)
+                    raise typer.Exit(1)
+                from trinops.cli.formatting import print_query_detail_rich
+                print_query_detail_rich(raw)
     except typer.Exit:
         raise
     except Exception as e:
@@ -189,27 +233,10 @@ def top(
     tui(server=server, profile=profile, user=user, auth=auth, interval=interval, backend=backend)
 
 
-mcp_app = typer.Typer(name="mcp", help="MCP server")
 config_app = typer.Typer(name="config", help="Manage trinops configuration")
 auth_app = typer.Typer(name="auth", help="Manage authentication")
-app.add_typer(mcp_app, name="mcp")
 app.add_typer(config_app, name="config")
 app.add_typer(auth_app, name="auth")
-
-
-@mcp_app.command("serve")
-def mcp_serve(
-    server: Optional[str] = typer.Option(None, help="Trino server host:port"),
-    profile: Optional[str] = typer.Option(None, help="Config profile name"),
-    user: Optional[str] = typer.Option(None, help="Trino user"),
-    auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
-    backend: str = typer.Option("http", help="Backend (http/sql)"),
-):
-    """Start MCP server on stdio."""
-    from trinops.mcp.server import run_stdio_server
-
-    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend, check=True)
-    run_stdio_server(client)
 
 
 @config_app.command("show")

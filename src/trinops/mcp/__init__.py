@@ -1,1 +1,0 @@
-"""trinops MCP server."""

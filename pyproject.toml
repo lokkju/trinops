@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "trinops"
 version = "0.1.0"
-description = "Trino query monitoring: CLI, TUI dashboard, MCP server, and progress library"
+description = "Trino query monitoring: CLI, TUI dashboard, and progress library"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -19,8 +19,7 @@ dependencies = [
 tqdm = ["tqdm>=4.60"]
 cli = ["typer>=0.9", "rich>=13.0"]
 tui = ["textual>=0.40"]
-mcp = []
-all = ["trinops[tqdm]", "trinops[cli]", "trinops[tui]", "trinops[mcp]"]
+all = ["trinops[tqdm]", "trinops[cli]", "trinops[tui]"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

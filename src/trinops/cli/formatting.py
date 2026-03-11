@@ -74,9 +74,120 @@ def print_query_detail(q: QueryInfo) -> None:
 
 
 def print_queries_json(queries: Sequence[QueryInfo]) -> None:
-    for q in queries:
-        print(json.dumps(dataclasses.asdict(q), default=str))
+    import sys
+    sys.stdout.write(json.dumps([dataclasses.asdict(q) for q in queries], default=str))
+    sys.stdout.write("\n")
 
 
 def print_query_json(q: QueryInfo) -> None:
-    print(json.dumps(dataclasses.asdict(q), default=str))
+    import sys
+    sys.stdout.write(json.dumps(dataclasses.asdict(q), default=str))
+    sys.stdout.write("\n")
+
+
+_STATE_STYLES = {
+    "RUNNING": "bold blue",
+    "QUEUED": "yellow",
+    "PLANNING": "yellow",
+    "STARTING": "yellow",
+    "DISPATCHING": "yellow",
+    "WAITING_FOR_RESOURCES": "yellow",
+    "FINISHING": "blue",
+    "FINISHED": "green",
+    "FAILED": "bold red",
+}
+
+
+def print_query_detail_rich(raw: dict) -> None:
+    """Print enriched query detail from raw REST API response."""
+    session = raw.get("session", {})
+    qs = raw.get("queryStats", {})
+    state = raw.get("state", "UNKNOWN")
+    style = _STATE_STYLES.get(state, "")
+
+    console.print(f"[bold]Query ID:[/]  {escape(raw.get('queryId', ''))}")
+    console.print(f"[bold]State:[/]     [{style}]{escape(state)}[/{style}]")
+    if raw.get("queryType"):
+        console.print(f"[bold]Type:[/]      {escape(raw['queryType'])}")
+    console.print(f"[bold]User:[/]      {escape(session.get('user', ''))}")
+    if session.get("source"):
+        console.print(f"[bold]Source:[/]    {escape(session['source'])}")
+    if session.get("catalog"):
+        catalog = session["catalog"]
+        schema = session.get("schema", "")
+        console.print(f"[bold]Catalog:[/]   {escape(catalog)}.{escape(schema)}" if schema else f"[bold]Catalog:[/]   {escape(catalog)}")
+    if raw.get("resourceGroupId"):
+        console.print(f"[bold]Resource:[/]  {escape('.'.join(raw['resourceGroupId']))}")
+
+    # Timing
+    console.print()
+    console.print("[bold underline]Timing[/]")
+    console.print(f"  Created:    {escape(qs.get('createTime', ''))}")
+    if qs.get("endTime"):
+        console.print(f"  Ended:      {escape(qs['endTime'])}")
+    console.print(f"  Elapsed:    {escape(qs.get('elapsedTime', ''))}")
+    console.print(f"  Queued:     {escape(qs.get('queuedTime', ''))}")
+    console.print(f"  Planning:   {escape(qs.get('planningTime', ''))}")
+    console.print(f"  Execution:  {escape(qs.get('executionTime', ''))}")
+    console.print(f"  CPU:        {escape(qs.get('totalCpuTime', ''))}")
+
+    # Data
+    console.print()
+    console.print("[bold underline]Data[/]")
+    console.print(f"  Input:      {escape(qs.get('physicalInputDataSize', ''))}  ({qs.get('physicalInputPositions', 0):,} rows)")
+    console.print(f"  Processed:  {escape(qs.get('processedInputDataSize', ''))}  ({qs.get('processedInputPositions', 0):,} rows)")
+    console.print(f"  Output:     {escape(qs.get('outputDataSize', ''))}  ({qs.get('outputPositions', 0):,} rows)")
+    if qs.get("physicalWrittenDataSize") and qs["physicalWrittenDataSize"] != "0B":
+        console.print(f"  Written:    {escape(qs['physicalWrittenDataSize'])}")
+    if qs.get("spilledDataSize") and qs["spilledDataSize"] != "0B":
+        console.print(f"  Spilled:    {escape(qs['spilledDataSize'])}")
+
+    # Memory
+    console.print()
+    console.print("[bold underline]Memory[/]")
+    console.print(f"  Peak user:  {escape(qs.get('peakUserMemoryReservation', ''))}")
+    console.print(f"  Peak total: {escape(qs.get('peakTotalMemoryReservation', ''))}")
+
+    # Tasks
+    console.print()
+    console.print("[bold underline]Tasks[/]")
+    console.print(f"  Tasks:      {qs.get('completedTasks', 0)}/{qs.get('totalTasks', 0)}")
+    console.print(f"  Drivers:    {qs.get('completedDrivers', 0)}/{qs.get('totalDrivers', 0)}")
+
+    # Tables accessed
+    inputs = raw.get("inputs", [])
+    if inputs:
+        console.print()
+        console.print("[bold underline]Tables[/]")
+        for inp in inputs:
+            tbl = f"  {escape(inp.get('catalogName', ''))}.{escape(inp.get('schema', ''))}.{escape(inp.get('table', ''))}"
+            cols = [c["name"] for c in inp.get("columns", [])]
+            info = inp.get("connectorInfo", {})
+            records = info.get("totalRecords", "")
+            suffix = f"  ({records} records)" if records else ""
+            console.print(f"{tbl}{suffix}")
+            if cols:
+                console.print(f"    columns: {', '.join(cols)}")
+
+    # Errors
+    error = raw.get("failureInfo")
+    if error:
+        console.print()
+        console.print(f"[bold red]Error:[/] {escape(error.get('type', ''))}")
+        if error.get("message"):
+            console.print(f"  {escape(error['message'])}")
+
+    # Warnings
+    warnings = raw.get("warnings", [])
+    if warnings:
+        console.print()
+        console.print("[bold yellow]Warnings:[/]")
+        for w in warnings:
+            console.print(f"  {escape(str(w))}")
+
+    # SQL
+    query = raw.get("query", "")
+    if query:
+        console.print()
+        console.print("[bold underline]SQL[/]")
+        console.print(escape(query))

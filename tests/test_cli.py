@@ -70,8 +70,7 @@ def test_queries_json_output(mock_profile, mock_build):
     result = runner.invoke(app, ["queries", "--server", "localhost:8080", "--json"])
     assert result.exit_code == 0
     import json
-    lines = [l for l in result.output.strip().split("\n") if l]
-    data = [json.loads(l) for l in lines]
+    data = json.loads(result.output.strip())
     assert len(data) == 2
     assert data[0]["query_id"] == "20260310_143549_08022_abc"
 
@@ -90,10 +89,42 @@ def test_queries_filter_state(mock_profile, mock_build):
     client.list_queries.assert_called_once_with(state="RUNNING", limit=25, query_user="loki")
 
 
+SAMPLE_RAW = {
+    "queryId": "20260310_143549_08022_abc",
+    "state": "RUNNING",
+    "query": "SELECT * FROM big_table WHERE id > 100",
+    "queryType": "SELECT",
+    "resourceGroupId": ["global"],
+    "session": {"user": "loki", "source": "trinops", "catalog": "hive", "schema": "default"},
+    "queryStats": {
+        "createTime": "2026-03-10T14:35:49Z",
+        "elapsedTime": "6.87s",
+        "queuedTime": "1.00ms",
+        "planningTime": "120.00ms",
+        "executionTime": "6.75s",
+        "totalCpuTime": "19.21s",
+        "peakUserMemoryReservation": "8650480B",
+        "peakTotalMemoryReservation": "8650480B",
+        "physicalInputDataSize": "474640412B",
+        "physicalInputPositions": 34148040,
+        "processedInputDataSize": "474640412B",
+        "processedInputPositions": 34148040,
+        "outputDataSize": "0B",
+        "outputPositions": 0,
+        "totalTasks": 10,
+        "completedTasks": 5,
+        "totalDrivers": 40,
+        "completedDrivers": 20,
+    },
+    "inputs": [],
+    "warnings": [],
+}
+
+
 @patch("trinops.cli.commands._build_client")
 def test_query_detail(mock_build):
     client = MagicMock()
-    client.get_query.return_value = SAMPLE_QUERIES[0]
+    client.get_query_raw.return_value = SAMPLE_RAW
     mock_build.return_value = client
 
     result = runner.invoke(app, ["query", "20260310_143549_08022_abc", "--server", "localhost:8080"])
@@ -105,20 +136,20 @@ def test_query_detail(mock_build):
 @patch("trinops.cli.commands._build_client")
 def test_query_detail_json(mock_build):
     client = MagicMock()
-    client.get_query.return_value = SAMPLE_QUERIES[0]
+    client.get_query_raw.return_value = SAMPLE_RAW
     mock_build.return_value = client
 
     result = runner.invoke(app, ["query", "20260310_143549_08022_abc", "--server", "localhost:8080", "--json"])
     assert result.exit_code == 0
     import json
     data = json.loads(result.output.strip())
-    assert data["query_id"] == "20260310_143549_08022_abc"
+    assert data["queryId"] == "20260310_143549_08022_abc"
 
 
 @patch("trinops.cli.commands._build_client")
 def test_query_not_found(mock_build):
     client = MagicMock()
-    client.get_query.return_value = None
+    client.get_query_raw.return_value = None
     mock_build.return_value = client
 
     result = runner.invoke(app, ["query", "nonexistent", "--server", "localhost:8080"])
