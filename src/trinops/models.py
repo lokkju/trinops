@@ -10,6 +10,8 @@ from typing import Optional
 
 class QueryState(str, Enum):
     QUEUED = "QUEUED"
+    WAITING_FOR_RESOURCES = "WAITING_FOR_RESOURCES"
+    DISPATCHING = "DISPATCHING"
     PLANNING = "PLANNING"
     STARTING = "STARTING"
     RUNNING = "RUNNING"
