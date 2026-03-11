@@ -8,7 +8,7 @@ from typing import Any, Sequence
 
 from trinops.progress.display import Display
 from trinops.progress.display.stderr import StderrDisplay
-from trinops.progress.poller import QueryPoller
+from trinops.progress.poller import QueryPoller, CursorPoller
 from trinops.progress.stats import QueryStats
 
 logger = logging.getLogger(__name__)
@@ -139,12 +139,18 @@ class TrinoProgress:
         return None
 
     def _start_poller(self) -> None:
-        self._poller = QueryPoller.from_connection(
-            self._connection,
-            query_id=self._query_id,
-            interval=self._interval,
-            max_failures=self._max_failures,
-        )
+        if self._mode == "cursor" and self._cursor is not None:
+            self._poller = CursorPoller(
+                cursor=self._cursor,
+                interval=self._interval,
+            )
+        else:
+            self._poller = QueryPoller.from_connection(
+                self._connection,
+                query_id=self._query_id,
+                interval=self._interval,
+                max_failures=self._max_failures,
+            )
         for display in self._displays:
             self._poller.add_callback(display.on_stats)
         self._poller.start()

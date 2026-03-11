@@ -3,7 +3,7 @@
 import json
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock
 
 from trinops import TrinoProgress, QueryStats
 
@@ -67,17 +67,19 @@ def _make_server():
 
 
 def test_full_context_manager_flow():
-    server = _make_server()
-    port = server.server_address[1]
+    """Integration test using CursorPoller (cursor mode polls cursor.stats)."""
+    stats_sequence = [r["stats"] for r in RESPONSES]
+    call_count = [0]
+    def get_stats():
+        idx = min(call_count[0], len(stats_sequence) - 1)
+        call_count[0] += 1
+        return stats_sequence[idx]
 
     cursor = MagicMock()
     cursor.query_id = "integration_test_1"
     cursor.connection = MagicMock(spec=["host", "port", "http_scheme", "auth"])
-    cursor.connection.host = "127.0.0.1"
-    cursor.connection.port = port
-    cursor.connection.http_scheme = "http"
-    cursor.connection.auth = None
     cursor.fetchall.return_value = [(1, "hello"), (2, "world")]
+    type(cursor).stats = PropertyMock(side_effect=get_stats)
 
     with TrinoProgress(cursor, display="stderr", interval=0.1) as tp:
         tp.execute("SELECT id, name FROM test_table")
@@ -86,7 +88,6 @@ def test_full_context_manager_flow():
     assert rows == [(1, "hello"), (2, "world")]
     assert tp.last_stats is not None
     assert tp.last_stats.state == "FINISHED"
-    server.shutdown()
 
 
 def test_full_standalone_flow():

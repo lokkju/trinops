@@ -161,3 +161,44 @@ def test_cursor_proxy_methods():
         assert tp.description == [("col1", "varchar")]
 
     server.shutdown()
+
+
+def test_context_manager_uses_cursor_stats():
+    """TrinoProgress in cursor mode polls cursor.stats, not HTTP."""
+    cursor = MagicMock()
+    cursor.query_id = "test_cursor_stats"
+    cursor.connection = MagicMock(spec=["host", "port", "http_scheme", "auth"])
+
+    stats_sequence = [
+        {
+            "state": "RUNNING", "queued": False, "scheduled": True, "nodes": 4,
+            "totalSplits": 100, "queuedSplits": 20, "runningSplits": 30,
+            "completedSplits": 50, "cpuTimeMillis": 3000, "wallTimeMillis": 5000,
+            "queuedTimeMillis": 100, "elapsedTimeMillis": 2000,
+            "processedRows": 2000000, "processedBytes": 80000000,
+            "physicalInputBytes": 80000000, "peakMemoryBytes": 5000000,
+            "spilledBytes": 0,
+        },
+        {
+            "state": "FINISHED", "queued": False, "scheduled": True, "nodes": 4,
+            "totalSplits": 100, "queuedSplits": 0, "runningSplits": 0,
+            "completedSplits": 100, "cpuTimeMillis": 5000, "wallTimeMillis": 8000,
+            "queuedTimeMillis": 100, "elapsedTimeMillis": 3000,
+            "processedRows": 5000000, "processedBytes": 100000000,
+            "physicalInputBytes": 100000000, "peakMemoryBytes": 4000000,
+            "spilledBytes": 0,
+        },
+    ]
+    call_count = [0]
+    def get_stats():
+        idx = min(call_count[0], len(stats_sequence) - 1)
+        call_count[0] += 1
+        return stats_sequence[idx]
+
+    type(cursor).stats = PropertyMock(side_effect=get_stats)
+
+    with TrinoProgress(cursor, display="stderr", interval=0.1) as tp:
+        tp.execute("SELECT 1")
+
+    assert tp.last_stats is not None
+    assert tp.last_stats.state == "FINISHED"
