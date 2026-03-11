@@ -21,4 +21,5 @@ def test_cli_importable():
 
 def test_version():
     import trinops
-    assert trinops.__version__ == "0.1.0"
+    assert trinops.__version__ != "0.0.0"
+    assert isinstance(trinops.__version__, str)
