@@ -14,12 +14,12 @@ from trino_progress.stats import QueryStats
 logger = logging.getLogger(__name__)
 
 
-def _resolve_displays(display) -> list[Display]:
+def _resolve_displays(display, web_port: int = 0) -> list[Display]:
     if isinstance(display, list):
         result = []
         for d in display:
             if isinstance(d, str):
-                result.extend(_resolve_displays(d))
+                result.extend(_resolve_displays(d, web_port=web_port))
             else:
                 result.append(d)
         return result
@@ -32,7 +32,7 @@ def _resolve_displays(display) -> list[Display]:
             return [TqdmDisplay()]
         elif display == "web":
             from trino_progress.display.web import WebDisplay
-            return [WebDisplay()]
+            return [WebDisplay(port=web_port)]
         elif display == "auto":
             try:
                 from trino_progress.display.tqdm import TqdmDisplay
@@ -45,6 +45,10 @@ def _resolve_displays(display) -> list[Display]:
     return [display]
 
 
+def _is_cursor(obj) -> bool:
+    return hasattr(obj, "execute") and hasattr(obj, "fetchall")
+
+
 class TrinoProgress:
     def __init__(
         self,
@@ -55,24 +59,21 @@ class TrinoProgress:
         max_failures: int = 5,
         web_port: int = 0,
     ) -> None:
-        self._displays = _resolve_displays(display)
+        self._displays = _resolve_displays(display, web_port=web_port)
         self._interval = interval
         self._max_failures = max_failures
         self._poller: QueryPoller | None = None
 
-        # When query_id is provided, the caller is using standalone mode
-        # with a connection object. Otherwise, treat the first argument
-        # as a cursor (context-manager mode).
-        if query_id is not None:
+        if _is_cursor(cursor_or_connection):
+            self._cursor = cursor_or_connection
+            self._connection = cursor_or_connection.connection
+            self._query_id = query_id
+            self._mode = "cursor"
+        else:
             self._cursor = None
             self._connection = cursor_or_connection
             self._query_id = query_id
             self._mode = "standalone"
-        else:
-            self._cursor = cursor_or_connection
-            self._connection = cursor_or_connection.connection
-            self._query_id = None
-            self._mode = "cursor"
 
     def __enter__(self) -> TrinoProgress:
         return self

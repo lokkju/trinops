@@ -97,15 +97,20 @@ def test_context_manager_basic():
     cursor.fetchall.assert_called_once()
 
 
-def test_standalone_mode():
-    server = _make_server([RUNNING_STATS_RESPONSE, FINISHED_STATS_RESPONSE])
-    port = server.server_address[1]
-
-    conn = MagicMock()
+def _make_mock_connection(port):
+    conn = MagicMock(spec=["host", "port", "http_scheme", "auth"])
     conn.host = "127.0.0.1"
     conn.port = port
     conn.http_scheme = "http"
     conn.auth = None
+    return conn
+
+
+def test_standalone_mode():
+    server = _make_server([RUNNING_STATS_RESPONSE, FINISHED_STATS_RESPONSE])
+    port = server.server_address[1]
+
+    conn = _make_mock_connection(port)
 
     tp = TrinoProgress(conn, query_id="test_standalone", display="stderr", interval=0.1)
     tp.start()
@@ -117,11 +122,7 @@ def test_display_auto_fallback():
     server = _make_server([FINISHED_STATS_RESPONSE])
     port = server.server_address[1]
 
-    conn = MagicMock()
-    conn.host = "127.0.0.1"
-    conn.port = port
-    conn.http_scheme = "http"
-    conn.auth = None
+    conn = _make_mock_connection(port)
 
     tp = TrinoProgress(conn, query_id="test_auto", display="auto", interval=0.1)
     tp.start()
@@ -133,11 +134,7 @@ def test_multiple_displays():
     server = _make_server([FINISHED_STATS_RESPONSE])
     port = server.server_address[1]
 
-    conn = MagicMock()
-    conn.host = "127.0.0.1"
-    conn.port = port
-    conn.http_scheme = "http"
-    conn.auth = None
+    conn = _make_mock_connection(port)
 
     mock_display = MagicMock()
     tp = TrinoProgress(conn, query_id="test_multi", display=[mock_display], interval=0.1)
