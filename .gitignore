@@ -8,3 +8,6 @@ build/
 *.egg
 .pytest_cache/
 .venv/
+.coverage
+htmlcov/
+*.so

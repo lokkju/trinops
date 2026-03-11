@@ -7,13 +7,36 @@ name = "trinops"
 dynamic = ["version"]
 description = "Trino query monitoring: CLI, TUI dashboard, and progress library"
 readme = "README.md"
-license = "Apache-2.0"
+license = "LicenseRef-PolyForm-Shield-1.0.0"
 requires-python = ">=3.10"
+authors = [
+    { name = "Loki Coyote", email = "loki@lokkju.com" },
+]
+keywords = ["trino", "monitoring", "cli", "tui", "queries"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: System :: Monitoring",
+]
 dependencies = [
     "trino>=0.320",
     "tomli>=1.0; python_version < '3.11'",
     "keyring>=23.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/lokkju/trinops"
+Repository = "https://github.com/lokkju/trinops"
+Issues = "https://github.com/lokkju/trinops/issues"
 
 [project.optional-dependencies]
 tqdm = ["tqdm>=4.60"]
