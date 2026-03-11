@@ -1,4 +1,4 @@
-from trino_progress.stats import QueryStats, StageStats, parse_stats
+from trinops.progress.stats import QueryStats, StageStats, parse_stats
 
 
 SAMPLE_STATS = {

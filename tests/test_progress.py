@@ -3,8 +3,8 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from unittest.mock import MagicMock, PropertyMock, patch
 
-from trino_progress.progress import TrinoProgress
-from trino_progress.stats import QueryStats
+from trinops.progress.progress import TrinoProgress
+from trinops.progress.stats import QueryStats
 
 
 RUNNING_STATS_RESPONSE = {

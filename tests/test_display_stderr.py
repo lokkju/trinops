@@ -1,8 +1,8 @@
 import io
 from unittest.mock import patch
 
-from trino_progress.display.stderr import StderrDisplay
-from trino_progress.stats import parse_stats
+from trinops.progress.display.stderr import StderrDisplay
+from trinops.progress.stats import parse_stats
 
 
 RUNNING_STATS = {

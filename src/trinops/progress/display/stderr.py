@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from typing import TextIO
 
-from trino_progress.stats import QueryStats
+from trinops.progress.stats import QueryStats
 
 
 def _format_bytes(n: int) -> str:

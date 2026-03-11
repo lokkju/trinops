@@ -1,7 +1,7 @@
 import pytest
 
-from trino_progress.display.tqdm import TqdmDisplay
-from trino_progress.stats import parse_stats
+from trinops.progress.display.tqdm import TqdmDisplay
+from trinops.progress.stats import parse_stats
 
 
 RUNNING_STATS = {
@@ -61,6 +61,6 @@ def test_tqdm_not_installed():
 
     with unittest.mock.patch.dict(sys.modules, {"tqdm": None, "tqdm.auto": None}):
         import importlib
-        from trino_progress.display import tqdm as tqdm_mod
+        from trinops.progress.display import tqdm as tqdm_mod
         with pytest.raises(ImportError, match="tqdm"):
             importlib.reload(tqdm_mod)

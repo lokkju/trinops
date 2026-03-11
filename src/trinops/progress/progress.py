@@ -6,10 +6,10 @@ import logging
 import sys
 from typing import Any, Sequence
 
-from trino_progress.display import Display
-from trino_progress.display.stderr import StderrDisplay
-from trino_progress.poller import QueryPoller
-from trino_progress.stats import QueryStats
+from trinops.progress.display import Display
+from trinops.progress.display.stderr import StderrDisplay
+from trinops.progress.poller import QueryPoller
+from trinops.progress.stats import QueryStats
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +28,14 @@ def _resolve_displays(display, web_port: int = 0) -> list[Display]:
         if display == "stderr":
             return [StderrDisplay()]
         elif display == "tqdm":
-            from trino_progress.display.tqdm import TqdmDisplay
+            from trinops.progress.display.tqdm import TqdmDisplay
             return [TqdmDisplay()]
         elif display == "web":
-            from trino_progress.display.web import WebDisplay
+            from trinops.progress.display.web import WebDisplay
             return [WebDisplay(port=web_port)]
         elif display == "auto":
             try:
-                from trino_progress.display.tqdm import TqdmDisplay
+                from trinops.progress.display.tqdm import TqdmDisplay
                 return [TqdmDisplay()]
             except ImportError:
                 return [StderrDisplay()]

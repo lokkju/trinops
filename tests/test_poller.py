@@ -4,8 +4,8 @@ import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from unittest.mock import MagicMock
 
-from trino_progress.poller import QueryPoller
-from trino_progress.stats import QueryStats
+from trinops.progress.poller import QueryPoller
+from trinops.progress.stats import QueryStats
 
 
 FINISHED_RESPONSE = {

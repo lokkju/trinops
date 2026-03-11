@@ -9,7 +9,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import TextIO
 
-from trino_progress.stats import QueryStats
+from trinops.progress.stats import QueryStats
 
 
 _HTML_TEMPLATE = """\

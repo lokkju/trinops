@@ -2,8 +2,8 @@ import json
 import time
 import urllib.request
 
-from trino_progress.display.web import WebDisplay
-from trino_progress.stats import parse_stats
+from trinops.progress.display.web import WebDisplay
+from trinops.progress.stats import parse_stats
 
 
 RUNNING_STATS = {

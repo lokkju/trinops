@@ -5,7 +5,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from unittest.mock import MagicMock
 
-from trino_progress import TrinoProgress, QueryStats
+from trinops import TrinoProgress, QueryStats
 
 
 RESPONSES = [

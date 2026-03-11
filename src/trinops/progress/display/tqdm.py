@@ -10,7 +10,7 @@ except ImportError:
         "Install it with: pip install trino-progress[tqdm]"
     )
 
-from trino_progress.stats import QueryStats
+from trinops.progress.stats import QueryStats
 
 
 class TqdmDisplay:

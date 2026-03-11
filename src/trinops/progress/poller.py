@@ -8,7 +8,7 @@ import threading
 from typing import Callable
 from urllib.request import Request, urlopen
 
-from trino_progress.stats import QueryStats, parse_stats
+from trinops.progress.stats import QueryStats, parse_stats
 
 logger = logging.getLogger(__name__)
 
