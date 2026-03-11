@@ -940,29 +940,35 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+tqdm = [
+    { name = "tqdm" },
+]
+
+[package.dev-dependencies]
 dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "tqdm" },
-]
-tqdm = [
     { name = "tqdm" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "keyring", specifier = ">=23.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "rich", specifier = ">=13.0" },
     { name = "textual", specifier = ">=0.40" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=1.0" },
-    { name = "tqdm", marker = "extra == 'dev'", specifier = ">=4.60" },
     { name = "tqdm", marker = "extra == 'tqdm'", specifier = ">=4.60" },
     { name = "trino", specifier = ">=0.320" },
     { name = "typer", specifier = ">=0.9" },
 ]
-provides-extras = ["dev", "tqdm"]
+provides-extras = ["tqdm"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=7.0" },
+    { name = "pytest-cov", specifier = ">=4.0" },
+    { name = "tqdm", specifier = ">=4.60" },
+]
 
 [[package]]
 name = "typer"

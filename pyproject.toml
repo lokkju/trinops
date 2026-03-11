@@ -43,11 +43,6 @@ Issues = "https://github.com/lokkju/trinops/issues"
 
 [project.optional-dependencies]
 tqdm = ["tqdm>=4.60"]
-dev = [
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
-    "tqdm>=4.60",
-]
 
 [project.scripts]
 trinops = "trinops.cli:app"
@@ -57,6 +52,13 @@ source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trinops"]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "tqdm>=4.60",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
