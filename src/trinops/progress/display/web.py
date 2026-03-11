@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections
 import dataclasses
 import json
 import sys
@@ -140,7 +141,7 @@ class WebDisplay:
         self._file = file or sys.stderr
         self._server = HTTPServer(("127.0.0.1", port), _Handler)
         self._server.latest_stats = None
-        self._server.stats_history = []
+        self._server.stats_history = collections.deque(maxlen=3600)
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
         actual_port = self._server.server_address[1]

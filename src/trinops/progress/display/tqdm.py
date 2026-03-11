@@ -7,7 +7,7 @@ try:
 except ImportError:
     raise ImportError(
         "tqdm is required for TqdmDisplay. "
-        "Install it with: pip install trino-progress[tqdm]"
+        "Install it with: pip install trinops[tqdm]"
     )
 
 from trinops.progress.stats import QueryStats

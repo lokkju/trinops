@@ -23,7 +23,7 @@ def test_client_delegates_to_backend():
 
     assert len(queries) == 1
     assert queries[0].query_id == "20260310_143549_08022_abc"
-    backend.list_queries.assert_called_once_with(state=None)
+    backend.list_queries.assert_called_once_with(state=None, limit=0, query_user=None)
 
 
 def test_client_passes_state_filter():
@@ -32,7 +32,7 @@ def test_client_passes_state_filter():
 
     client = TrinopsClient(backend=backend)
     client.list_queries(state="RUNNING")
-    backend.list_queries.assert_called_once_with(state="RUNNING")
+    backend.list_queries.assert_called_once_with(state="RUNNING", limit=0, query_user=None)
 
 
 def test_client_get_query():

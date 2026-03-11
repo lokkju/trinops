@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 from typing import Optional
 
@@ -13,8 +14,7 @@ def resolve_password(profile: ConnectionProfile) -> Optional[str]:
         return profile.password
     if profile.password_cmd is not None:
         result = subprocess.run(
-            profile.password_cmd,
-            shell=True,
+            shlex.split(profile.password_cmd),
             capture_output=True,
             text=True,
             timeout=10,

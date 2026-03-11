@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
@@ -40,12 +41,17 @@ SAMPLE_QUERIES = [
 
 
 @patch("trinops.cli.commands._build_client")
-def test_queries_table_output(mock_build):
+@patch("trinops.cli.commands._build_profile")
+def test_queries_table_output(mock_profile, mock_build):
+    from rich.console import Console
+    from trinops.config import ConnectionProfile
+    mock_profile.return_value = ConnectionProfile(server="localhost:8080", user="loki")
     client = MagicMock()
     client.list_queries.return_value = SAMPLE_QUERIES
     mock_build.return_value = client
 
-    result = runner.invoke(app, ["queries", "--server", "localhost:8080"])
+    with patch("trinops.cli.formatting.console", Console(width=200)):
+        result = runner.invoke(app, ["queries", "--server", "localhost:8080"])
     assert result.exit_code == 0
     assert "20260310_143549" in result.output
     assert "RUNNING" in result.output
@@ -53,7 +59,10 @@ def test_queries_table_output(mock_build):
 
 
 @patch("trinops.cli.commands._build_client")
-def test_queries_json_output(mock_build):
+@patch("trinops.cli.commands._build_profile")
+def test_queries_json_output(mock_profile, mock_build):
+    from trinops.config import ConnectionProfile
+    mock_profile.return_value = ConnectionProfile(server="localhost:8080", user="loki")
     client = MagicMock()
     client.list_queries.return_value = SAMPLE_QUERIES
     mock_build.return_value = client
@@ -68,14 +77,17 @@ def test_queries_json_output(mock_build):
 
 
 @patch("trinops.cli.commands._build_client")
-def test_queries_filter_state(mock_build):
+@patch("trinops.cli.commands._build_profile")
+def test_queries_filter_state(mock_profile, mock_build):
+    from trinops.config import ConnectionProfile
+    mock_profile.return_value = ConnectionProfile(server="localhost:8080", user="loki")
     client = MagicMock()
     client.list_queries.return_value = [SAMPLE_QUERIES[0]]
     mock_build.return_value = client
 
     result = runner.invoke(app, ["queries", "--server", "localhost:8080", "--state", "RUNNING"])
     assert result.exit_code == 0
-    client.list_queries.assert_called_once_with(state="RUNNING")
+    client.list_queries.assert_called_once_with(state="RUNNING", limit=25, query_user="loki")
 
 
 @patch("trinops.cli.commands._build_client")
@@ -111,3 +123,16 @@ def test_query_not_found(mock_build):
 
     result = runner.invoke(app, ["query", "nonexistent", "--server", "localhost:8080"])
     assert result.exit_code != 0 or "not found" in result.output.lower()
+
+
+@patch("trinops.cli.commands.load_config")
+def test_no_server_configured_shows_error(mock_config):
+    from trinops.config import TrinopsConfig
+    mock_config.return_value = TrinopsConfig()
+
+    env = os.environ.copy()
+    env.pop("TRINOPS_SERVER", None)
+    with patch.dict(os.environ, env, clear=True):
+        result = runner.invoke(app, ["queries"])
+    assert result.exit_code != 0
+    assert "No Trino server configured" in result.output

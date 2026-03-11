@@ -102,7 +102,15 @@ def run_stdio_server(client: TrinopsClient) -> None:
         method = request.get("method")
         req_id = request.get("id")
 
-        if method == "tools/list":
+        if method == "initialize":
+            response = {"jsonrpc": "2.0", "id": req_id, "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "trinops", "version": "0.1.0"},
+            }}
+        elif method == "notifications/initialized":
+            continue
+        elif method == "tools/list":
             response = {"jsonrpc": "2.0", "id": req_id, "result": {"tools": list_tools()}}
         elif method == "tools/call":
             params = request.get("params", {})

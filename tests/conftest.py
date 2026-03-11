@@ -1,1 +1,1 @@
-"""Shared fixtures for trino-progress tests."""
+"""Shared fixtures for trinops tests."""

@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+
+# Trino sends nanosecond-precision timestamps that Python's fromisoformat
+# can't parse (max 6 fractional digits). Truncate to microseconds.
+_NANO_RE = re.compile(r"(\.\d{6})\d+")
+
+
+def _parse_iso_timestamp(s: str) -> datetime:
+    s = s.replace("Z", "+00:00")
+    s = _NANO_RE.sub(r"\1", s)
+    return datetime.fromisoformat(s)
 
 
 class QueryState(str, Enum):
@@ -57,6 +68,26 @@ class QueryInfo:
 
     @classmethod
     def from_system_row(cls, row: dict) -> QueryInfo:
+        def _ms(key: str) -> int:
+            """Get a time value as milliseconds. Handles both seconds (float) and _ms (int) columns."""
+            v = row.get(key)
+            if v is not None:
+                return int(v * 1000)
+            # Try the _ms variant (already in millis)
+            v = row.get(f"{key}_ms")
+            if v is not None:
+                return int(v)
+            return 0
+
+        def _int(key: str) -> int:
+            v = row.get(key)
+            return int(v) if v is not None else 0
+
+        # Elapsed time: fall back to sum of analysis + planning + queued if not available
+        elapsed = _ms("elapsed_time")
+        if elapsed == 0:
+            elapsed = _ms("queued_time") + _ms("analysis_time") + _ms("planning_time")
+
         return cls(
             query_id=row["query_id"],
             state=QueryState(row["state"]),
@@ -66,14 +97,14 @@ class QueryInfo:
             created=row.get("created"),
             started=row.get("started"),
             ended=row.get("end"),
-            cpu_time_millis=int(row.get("cpu_time", 0) * 1000),
-            wall_time_millis=int(row.get("wall_time", 0) * 1000),
-            queued_time_millis=int(row.get("queued_time", 0) * 1000),
-            elapsed_time_millis=int(row.get("elapsed_time", 0) * 1000),
-            peak_memory_bytes=int(row.get("peak_memory_bytes", 0)),
-            cumulative_memory_bytes=int(row.get("cumulative_memory", 0)),
-            processed_rows=int(row.get("processed_rows", 0)),
-            processed_bytes=int(row.get("processed_bytes", 0)),
+            cpu_time_millis=_ms("cpu_time"),
+            wall_time_millis=_ms("wall_time"),
+            queued_time_millis=_ms("queued_time"),
+            elapsed_time_millis=elapsed,
+            peak_memory_bytes=_int("peak_memory_bytes"),
+            cumulative_memory_bytes=_int("cumulative_memory"),
+            processed_rows=_int("processed_rows"),
+            processed_bytes=_int("processed_bytes"),
             error_code=row.get("error_code"),
             error_message=row.get("error_message"),
         )
@@ -96,10 +127,10 @@ class QueryInfo:
 
         created = None
         if stats.get("createTime"):
-            created = datetime.fromisoformat(stats["createTime"].replace("Z", "+00:00"))
+            created = _parse_iso_timestamp(stats["createTime"])
         ended = None
         if stats.get("endTime"):
-            ended = datetime.fromisoformat(stats["endTime"].replace("Z", "+00:00"))
+            ended = _parse_iso_timestamp(stats["endTime"])
 
         return cls(
             query_id=data["queryId"],

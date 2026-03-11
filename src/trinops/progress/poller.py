@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import warnings
 from typing import Callable
 from urllib.request import Request, urlopen
 
@@ -22,20 +23,24 @@ class QueryPoller:
         query_id: str = "",
         interval: float = 1.0,
         max_failures: int = 5,
-        auth: object | None = None,
     ) -> None:
+        warnings.warn(
+            "QueryPoller uses /v1/query/{id} which is not a stable Trino API. "
+            "Use CursorPoller (cursor mode) instead. Standalone HTTP polling will "
+            "be replaced when Trino #22488 lands.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._host = host
         self._port = port
         self._http_scheme = http_scheme
         self._query_id = query_id
         self._interval = interval
         self._max_failures = max_failures
-        self._auth = auth
         self._callbacks: list[Callable[[QueryStats], None]] = []
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._done_event = threading.Event()
-        self._session = None
         self._last_stats: QueryStats | None = None
 
     @classmethod
@@ -53,7 +58,6 @@ class QueryPoller:
             query_id=query_id,
             interval=interval,
             max_failures=max_failures,
-            auth=getattr(connection, "auth", None),
         )
 
     def add_callback(self, callback: Callable[[QueryStats], None]) -> None:
@@ -86,19 +90,8 @@ class QueryPoller:
     def _fetch_stats(self) -> QueryStats:
         url = self._build_url()
         request = Request(url, headers={"Accept": "application/json"})
-        if self._auth is not None and self._session is None:
-            import requests
-
-            self._session = requests.Session()
-            self._auth.set_http_session(self._session)
-
-        if self._session is not None:
-            response = self._session.get(url)
-            response.raise_for_status()
-            data = response.json()
-        else:
-            with urlopen(request, timeout=max(self._interval, 2.0)) as response:
-                data = json.loads(response.read())
+        with urlopen(request, timeout=max(self._interval, 2.0)) as response:
+            data = json.loads(response.read())
 
         return parse_stats(data["stats"])
 

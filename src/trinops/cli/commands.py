@@ -1,18 +1,35 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import Optional
 
 import typer
+from rich.console import Console
 
 from trinops.client import TrinopsClient
 from trinops.config import ConnectionProfile, load_config
+
+_console = Console(stderr=True)
+
+
+@contextmanager
+def _status(message: str):
+    """Show a spinner on stderr while work is in progress."""
+    with _console.status(message):
+        yield
 
 app = typer.Typer(name="trinops", help="Trino query monitoring tool", invoke_without_command=True)
 
 
 @app.callback()
-def main(ctx: typer.Context):
+def main(
+    ctx: typer.Context,
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
+):
     """Trino query monitoring tool."""
+    if debug:
+        import logging
+        logging.basicConfig(level=logging.DEBUG, format="%(name)s %(message)s", stream=__import__("sys").stderr)
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
 
@@ -56,14 +73,17 @@ def _build_client(
     user: Optional[str] = None,
     auth: Optional[str] = None,
     backend: str = "http",
+    check: bool = False,
 ) -> TrinopsClient:
     cp = _build_profile(server=server, profile=profile, user=user, auth=auth)
     client = TrinopsClient.from_profile(cp, backend=backend)
-    try:
-        client.check_connection()
-    except ConnectionError as e:
-        typer.echo(str(e), err=True)
-        raise typer.Exit(1)
+    if check:
+        with _status("Connecting to Trino..."):
+            try:
+                client.check_connection()
+            except ConnectionError as e:
+                typer.echo(str(e), err=True)
+                raise typer.Exit(1)
     return client
 
 
@@ -73,20 +93,37 @@ def queries(
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
     user: Optional[str] = typer.Option(None, help="Trino user"),
     auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
+    query_user: Optional[str] = typer.Option(None, "--query-user", help="Filter by query owner (default: you, 'all' for everyone)"),
     state: Optional[str] = typer.Option(None, help="Filter by query state"),
+    limit: int = typer.Option(25, "--limit", "-n", help="Max queries per page (0 for all)"),
+    page: int = typer.Option(1, "--page", "-p", help="Page number (1-based)"),
     json: bool = typer.Option(False, "--json", help="JSON output"),
     backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """List running and recent queries."""
+    cp = _build_profile(server=server, profile=profile, user=user, auth=auth)
     client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend)
-    results = client.list_queries(state=state)
-
-    if json:
-        from trinops.cli.formatting import print_queries_json
-        print_queries_json(results)
-    else:
-        from trinops.cli.formatting import print_queries_table
-        print_queries_table(results)
+    effective_user = None if query_user == "all" else (query_user or cp.user)
+    try:
+        with _status("Loading..."):
+            fetch_limit = limit * page if limit > 0 else 0
+            results = client.list_queries(state=state, limit=fetch_limit, query_user=effective_user)
+            total = len(results)
+            if limit > 0:
+                start = (page - 1) * limit
+                results = results[start : start + limit]
+            if json:
+                from trinops.cli.formatting import print_queries_json
+                print_queries_json(results)
+            else:
+                from trinops.cli.formatting import print_queries_table
+                print_queries_table(results)
+                if limit > 0 and total > limit:
+                    total_pages = (total + limit - 1) // limit
+                    _console.print(f"Page {page}/{total_pages} ({total} total queries)")
+    except Exception as e:
+        typer.echo(f"Failed to fetch queries: {e}", err=True)
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -101,18 +138,23 @@ def query(
 ):
     """Show details for a specific query."""
     client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend)
-    qi = client.get_query(query_id)
-
-    if qi is None:
-        typer.echo(f"Query not found: {query_id}", err=True)
+    try:
+        with _status("Loading..."):
+            qi = client.get_query(query_id)
+            if qi is None:
+                typer.echo(f"Query not found: {query_id}", err=True)
+                raise typer.Exit(1)
+            if json:
+                from trinops.cli.formatting import print_query_json
+                print_query_json(qi)
+            else:
+                from trinops.cli.formatting import print_query_detail
+                print_query_detail(qi)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        typer.echo(f"Failed to fetch query: {e}", err=True)
         raise typer.Exit(1)
-
-    if json:
-        from trinops.cli.formatting import print_query_json
-        print_query_json(qi)
-    else:
-        from trinops.cli.formatting import print_query_detail
-        print_query_detail(qi)
 
 
 @app.command()
@@ -121,20 +163,14 @@ def tui(
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
     user: Optional[str] = typer.Option(None, help="Trino user"),
     auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
-    interval: float = typer.Option(1.0, help="Refresh interval in seconds"),
+    interval: float = typer.Option(30.0, help="Refresh interval in seconds"),
     backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """Launch interactive TUI dashboard."""
     from trinops.tui.app import TrinopsApp
 
     cp = _build_profile(server=server, profile=profile, user=user, auth=auth)
-    # Verify connection before launching TUI
-    client = TrinopsClient.from_profile(cp, backend=backend)
-    try:
-        client.check_connection()
-    except ConnectionError as e:
-        typer.echo(str(e), err=True)
-        raise typer.Exit(1)
+    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend, check=True)
     client.close()
     tui_app = TrinopsApp(profile=cp, interval=interval)
     tui_app.run()
@@ -146,7 +182,7 @@ def top(
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
     user: Optional[str] = typer.Option(None, help="Trino user"),
     auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
-    interval: float = typer.Option(1.0, help="Refresh interval in seconds"),
+    interval: float = typer.Option(30.0, help="Refresh interval in seconds"),
     backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """Launch interactive TUI dashboard (alias for tui)."""
@@ -172,7 +208,7 @@ def mcp_serve(
     """Start MCP server on stdio."""
     from trinops.mcp.server import run_stdio_server
 
-    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend)
+    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend, check=True)
     run_stdio_server(client)
 
 

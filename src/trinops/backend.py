@@ -3,10 +3,22 @@
 from __future__ import annotations
 
 import base64
+import gzip
 import json
+import logging
+import time
 from typing import Optional, Protocol, runtime_checkable
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+
+try:
+    import orjson as _json
+except ImportError:
+    _json = json  # type: ignore[assignment]
+
+_QUERY_PREVIEW_LEN = 300
+
+_log = logging.getLogger(__name__)
 
 import trino.dbapi
 
@@ -17,20 +29,36 @@ from trinops.models import QueryInfo
 
 @runtime_checkable
 class QueryBackend(Protocol):
-    def list_queries(self, state: Optional[str] = None) -> list[QueryInfo]: ...
+    def list_queries(self, state: Optional[str] = None, limit: int = 0, query_user: Optional[str] = None) -> list[QueryInfo]: ...
     def get_query(self, query_id: str) -> Optional[QueryInfo]: ...
     def close(self) -> None: ...
 
 
-_SYSTEM_QUERY_SQL = """\
-SELECT
-    query_id, state, query, "user", source,
-    created, started, "end",
-    cpu_time, wall_time, queued_time, elapsed_time,
-    peak_memory_bytes, cumulative_memory, processed_rows, processed_bytes,
-    error_code, error_message
-FROM system.runtime.queries
-"""
+# Required columns (must exist in all Trino versions)
+_REQUIRED_COLS = ["query_id", "state", "query", '"user"', "source", "created"]
+
+# Optional columns — we try each candidate and use whichever exists.
+# Maps our internal name -> list of candidate column names to try.
+# Time columns: some clusters use seconds (cpu_time), others use millis (queued_time_ms).
+_OPTIONAL_COL_CANDIDATES = {
+    "started": ["started"],
+    "end": ['"end"'],
+    "cpu_time": ["cpu_time", "total_cpu_time"],
+    "wall_time": ["wall_time"],
+    "queued_time": ["queued_time"],
+    "queued_time_ms": ["queued_time_ms"],
+    "elapsed_time": ["elapsed_time"],
+    "analysis_time_ms": ["analysis_time_ms"],
+    "planning_time_ms": ["planning_time_ms"],
+    "peak_memory_bytes": ["peak_memory_bytes"],
+    "cumulative_memory": ["cumulative_memory"],
+    "processed_rows": ["processed_rows"],
+    "processed_bytes": ["processed_bytes"],
+    "error_code": ["error_code"],
+    "error_message": ["error_message"],
+    "error_type": ["error_type"],
+    "resource_group_id": ["resource_group_id"],
+}
 
 
 class SqlQueryBackend:
@@ -39,11 +67,13 @@ class SqlQueryBackend:
     def __init__(self, profile: ConnectionProfile) -> None:
         self._profile = profile
         self._conn = None
+        self._select_sql: Optional[str] = None
+        self._available_cols: Optional[set[str]] = None
 
     def _get_connection(self):
         if self._conn is None:
             host, _, port_str = self._profile.server.partition(":")
-            port = int(port_str) if port_str else 8080
+            port = int(port_str) if port_str else (443 if self._profile.scheme == "https" else 80)
             auth = build_auth(self._profile)
             self._conn = trino.dbapi.connect(
                 host=host,
@@ -56,31 +86,76 @@ class SqlQueryBackend:
             )
         return self._conn
 
+    def _discover_columns(self) -> None:
+        """Query SHOW COLUMNS once to learn what this cluster has."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        t0 = time.monotonic()
+        cursor.execute("SHOW COLUMNS FROM system.runtime.queries")
+        rows = cursor.fetchall()
+        self._available_cols = {row[0] for row in rows}
+        _log.debug("Column discovery took %.3fs, found %d columns: %s",
+                   time.monotonic() - t0, len(self._available_cols),
+                   sorted(self._available_cols))
+
+        # Build SELECT clause: required + whichever optional cols exist
+        cols = list(_REQUIRED_COLS)
+        for internal_name, candidates in _OPTIONAL_COL_CANDIDATES.items():
+            for candidate in candidates:
+                # Strip quotes for comparison with SHOW COLUMNS output
+                bare = candidate.strip('"')
+                if bare in self._available_cols:
+                    if candidate != internal_name and bare != internal_name:
+                        cols.append(f'{candidate} AS "{internal_name}"')
+                    else:
+                        cols.append(candidate)
+                    break
+        self._select_sql = f"SELECT {', '.join(cols)} FROM system.runtime.queries"
+
+    def _get_select_sql(self) -> str:
+        if self._select_sql is None:
+            self._discover_columns()
+        return self._select_sql
+
     def _query_to_dicts(self, cursor, rows) -> list[dict]:
         columns = [desc[0] for desc in cursor.description]
         return [dict(zip(columns, row)) for row in rows]
 
-    def list_queries(self, state: Optional[str] = None) -> list[QueryInfo]:
+    def list_queries(self, state: Optional[str] = None, limit: int = 0, query_user: Optional[str] = None) -> list[QueryInfo]:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        sql = _SYSTEM_QUERY_SQL
+        sql = self._get_select_sql()
         params = []
+        conditions = []
         if state is not None:
-            sql += " WHERE state = ?"
+            conditions.append("state = ?")
             params.append(state)
+        if query_user is not None:
+            conditions.append('"user" = ?')
+            params.append(query_user)
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
         sql += " ORDER BY created DESC"
+        if limit > 0:
+            sql += f" LIMIT {int(limit)}"
 
+        t0 = time.monotonic()
         cursor.execute(sql, params if params else None)
         rows = cursor.fetchall()
+        t_fetch = time.monotonic()
         dicts = self._query_to_dicts(cursor, rows)
-        return [QueryInfo.from_system_row(row) for row in dicts]
+        result = [QueryInfo.from_system_row(row) for row in dicts]
+        t_parse = time.monotonic()
+        _log.debug("SQL list_queries: fetch=%.3fs parse(%d rows)=%.3fs total=%.3fs",
+                   t_fetch - t0, len(result), t_parse - t_fetch, t_parse - t0)
+        return result
 
     def get_query(self, query_id: str) -> Optional[QueryInfo]:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        sql = _SYSTEM_QUERY_SQL + " WHERE query_id = ?"
+        sql = self._get_select_sql() + " WHERE query_id = ?"
         cursor.execute(sql, [query_id])
         rows = cursor.fetchall()
         if not rows:
@@ -97,16 +172,20 @@ class SqlQueryBackend:
 class HttpQueryBackend:
     """Queries Trino REST API directly via /v1/query endpoints."""
 
-    def __init__(self, profile: ConnectionProfile) -> None:
+    def __init__(self, profile: ConnectionProfile, cache_ttl: float = 30.0) -> None:
         self._profile = profile
         host, _, port_str = profile.server.partition(":")
-        port = int(port_str) if port_str else 8080
+        port = int(port_str) if port_str else (443 if profile.scheme == "https" else 80)
         self._base_url = f"{profile.scheme}://{host}:{port}"
-        self._headers = self._build_headers(profile)
+        self._session = None  # requests.Session, used for oauth2/kerberos
+        self._headers = self._build_auth(profile)
+        self._cache_ttl = cache_ttl
+        self._list_cache: Optional[list] = None
+        self._list_cache_time: float = 0.0
 
-    @staticmethod
-    def _build_headers(profile: ConnectionProfile) -> dict[str, str]:
-        headers = {"Accept": "application/json"}
+    def _build_auth(self, profile: ConnectionProfile) -> dict[str, str]:
+        """Build auth headers, or configure a requests.Session for complex auth."""
+        headers = {"Accept": "application/json", "Accept-Encoding": "gzip"}
         if profile.user:
             headers["X-Trino-User"] = profile.user
 
@@ -125,10 +204,21 @@ class HttpQueryBackend:
                 raise ValueError("jwt auth requires jwt_token")
             headers["Authorization"] = f"Bearer {token}"
         elif method in ("oauth2", "kerberos"):
-            raise ValueError(
-                f"{method} auth is not supported with the HTTP backend; "
-                f"use --backend sql instead"
-            )
+            import requests as req
+            self._session = req.Session()
+            self._session.headers.update(headers)
+            trino_auth = build_auth(profile)
+            trino_auth.set_http_session(self._session)
+            if method == "oauth2":
+                try:
+                    import keyring  # noqa: F401
+                except ImportError:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "keyring is not installed; OAuth2 tokens will not be cached "
+                        "across sessions. Install keyring to avoid re-authenticating: "
+                        "pip install keyring"
+                    )
         else:
             raise ValueError(f"Unknown auth method: {method!r}")
 
@@ -136,16 +226,76 @@ class HttpQueryBackend:
 
     def _get_json(self, path: str):
         url = f"{self._base_url}{path}"
+        t0 = time.monotonic()
+        if self._session is not None:
+            # Stream to measure wire bytes before requests decompresses
+            response = self._session.get(url, timeout=30, stream=True)
+            response.raise_for_status()
+            wire = response.raw.read()
+            t_net = time.monotonic()
+            encoding = response.headers.get("Content-Encoding", "")
+            raw = gzip.decompress(wire) if encoding == "gzip" else wire
+            data = _json.loads(raw)
+            t_parse = time.monotonic()
+            _log.debug("GET %s: network=%.3fs json_parse=%.3fs wire=%d bytes body=%d bytes encoding=%s",
+                       path, t_net - t0, t_parse - t_net, len(wire), len(raw), encoding or "identity")
+            return data
         request = Request(url, headers=self._headers)
-        with urlopen(request, timeout=10) as response:
-            return json.loads(response.read())
+        with urlopen(request, timeout=30) as response:
+            raw = response.read()
+            t_net = time.monotonic()
+            encoding = response.headers.get("Content-Encoding", "")
+            if encoding == "gzip":
+                raw = gzip.decompress(raw)
+            data = _json.loads(raw)
+            t_parse = time.monotonic()
+            _log.debug("GET %s: network=%.3fs json_parse=%.3fs wire=%d bytes encoding=%s",
+                       path, t_net - t0, t_parse - t_net, len(raw), encoding or "identity")
+            return data
 
-    def list_queries(self, state: Optional[str] = None) -> list[QueryInfo]:
+    def _get_all_queries_raw(self, state: Optional[str] = None) -> list:
+        """Fetch /v1/query with short-lived cache to avoid re-downloading 40+ MB every refresh."""
+        now = time.monotonic()
+        if self._list_cache is not None and (now - self._list_cache_time) < self._cache_ttl:
+            _log.debug("list_queries: using cached data (age=%.1fs)", now - self._list_cache_time)
+            return self._list_cache
+
         path = "/v1/query"
-        if state:
-            path += f"?state={state}"
+        if state is not None:
+            from urllib.parse import quote
+            path += f"?state={quote(state)}"
+        data = self._get_json_light(path)
+        self._list_cache = data
+        self._list_cache_time = time.monotonic()
+        return data
+
+    def _get_json_light(self, path: str):
+        """Fetch JSON for list view, truncating query text to save memory.
+
+        The /v1/query endpoint returns ~45 MB for 10K queries; most of that is
+        full SQL text. We truncate it after parsing since orjson is faster than
+        any byte-level preprocessing. This cuts cached memory from ~45 MB to ~5 MB.
+        """
         data = self._get_json(path)
-        return [QueryInfo.from_rest_response(item) for item in data]
+        for item in data:
+            q = item.get("query")
+            if q and len(q) > _QUERY_PREVIEW_LEN:
+                item["query"] = q[:_QUERY_PREVIEW_LEN]
+        return data
+
+    def list_queries(self, state: Optional[str] = None, limit: int = 0, query_user: Optional[str] = None) -> list[QueryInfo]:
+        t0 = time.monotonic()
+        data = self._get_all_queries_raw(state=state)
+        t_fetch = time.monotonic()
+        if query_user is not None:
+            data = [item for item in data if item.get("session", {}).get("user") == query_user]
+        t_filter = time.monotonic()
+        items = data[:limit] if limit > 0 else data
+        result = [QueryInfo.from_rest_response(item) for item in items]
+        t_parse = time.monotonic()
+        _log.debug("list_queries: fetch=%.3fs filter=%.3fs parse(%d items)=%.3fs total=%.3fs",
+                   t_fetch - t0, t_filter - t_fetch, len(items), t_parse - t_filter, t_parse - t0)
+        return result
 
     def get_query(self, query_id: str) -> Optional[QueryInfo]:
         try:
@@ -154,6 +304,12 @@ class HttpQueryBackend:
         except HTTPError as e:
             if e.code in (404, 410):
                 return None
+            raise
+        except Exception as e:
+            # requests raises different exceptions than urllib
+            if self._session is not None and hasattr(e, "response"):
+                if e.response is not None and e.response.status_code in (404, 410):
+                    return None
             raise
 
     def check_connection(self) -> None:
@@ -179,6 +335,15 @@ class HttpQueryBackend:
                     f"Check your auth configuration (current: {self._profile.auth})."
                 ) from e
             raise
+        except Exception as e:
+            if self._session is not None and hasattr(e, "response"):
+                if e.response is not None and e.response.status_code in (401, 403):
+                    raise ConnectionError(
+                        f"Authentication failed (HTTP {e.response.status_code}). "
+                        f"Check your auth configuration (current: {self._profile.auth})."
+                    ) from e
+            raise
 
     def close(self) -> None:
-        pass
+        if self._session is not None:
+            self._session.close()
