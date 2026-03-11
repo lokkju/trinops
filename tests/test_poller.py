@@ -2,7 +2,7 @@ import json
 import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock
 
 from trinops.progress.poller import QueryPoller
 from trinops.progress.stats import QueryStats
@@ -144,4 +144,49 @@ def test_poller_from_connection():
     poller.wait(timeout=5)
     server.shutdown()
 
+    assert not poller.is_alive()
+
+
+def test_cursor_poller_delivers_stats():
+    """Poller can poll stats from a cursor's stats property."""
+    from trinops.progress.poller import CursorPoller
+    from trinops.progress.stats import QueryStats
+
+    mock_cursor = MagicMock()
+    stats_sequence = [
+        {
+            "state": "RUNNING", "queued": False, "scheduled": True, "nodes": 4,
+            "totalSplits": 100, "queuedSplits": 20, "runningSplits": 30,
+            "completedSplits": 50, "cpuTimeMillis": 3000, "wallTimeMillis": 5000,
+            "queuedTimeMillis": 100, "elapsedTimeMillis": 2000,
+            "processedRows": 2000000, "processedBytes": 80000000,
+            "physicalInputBytes": 80000000, "peakMemoryBytes": 5000000,
+            "spilledBytes": 0,
+        },
+        {
+            "state": "FINISHED", "queued": False, "scheduled": True, "nodes": 4,
+            "totalSplits": 100, "queuedSplits": 0, "runningSplits": 0,
+            "completedSplits": 100, "cpuTimeMillis": 5000, "wallTimeMillis": 8000,
+            "queuedTimeMillis": 100, "elapsedTimeMillis": 3000,
+            "processedRows": 5000000, "processedBytes": 100000000,
+            "physicalInputBytes": 100000000, "peakMemoryBytes": 4000000,
+            "spilledBytes": 0,
+        },
+    ]
+    call_count = [0]
+    def get_stats():
+        idx = min(call_count[0], len(stats_sequence) - 1)
+        call_count[0] += 1
+        return stats_sequence[idx]
+
+    type(mock_cursor).stats = PropertyMock(side_effect=get_stats)
+
+    received = []
+    poller = CursorPoller(cursor=mock_cursor, interval=0.1)
+    poller.add_callback(lambda s: received.append(s))
+    poller.start()
+    poller.wait(timeout=5)
+
+    assert len(received) >= 2
+    assert received[-1].state == "FINISHED"
     assert not poller.is_alive()

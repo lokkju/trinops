@@ -135,3 +135,72 @@ class QueryPoller:
                 self._stop_event.wait(timeout=self._interval)
         finally:
             self._done_event.set()
+
+
+class CursorPoller:
+    """Polls a trino cursor's stats property in a background thread."""
+
+    def __init__(
+        self,
+        cursor,
+        interval: float = 1.0,
+    ) -> None:
+        self._cursor = cursor
+        self._interval = interval
+        self._callbacks: list[Callable[[QueryStats], None]] = []
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._done_event = threading.Event()
+        self._last_stats: QueryStats | None = None
+
+    def add_callback(self, callback: Callable[[QueryStats], None]) -> None:
+        self._callbacks.append(callback)
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._poll_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+
+    def wait(self, timeout: float | None = None) -> None:
+        self._done_event.wait(timeout=timeout)
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+
+    def is_alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def last_stats(self) -> QueryStats | None:
+        return self._last_stats
+
+    def _poll_loop(self) -> None:
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    raw_stats = self._cursor.stats
+                    if raw_stats is None:
+                        self._stop_event.wait(timeout=self._interval)
+                        continue
+                    stats = parse_stats(raw_stats)
+                    self._last_stats = stats
+
+                    for callback in self._callbacks:
+                        try:
+                            callback(stats)
+                        except Exception:
+                            logger.exception("Display callback error")
+
+                    if stats.is_terminal:
+                        return
+
+                except Exception:
+                    logger.exception("Error polling cursor stats")
+                    return
+
+                self._stop_event.wait(timeout=self._interval)
+        finally:
+            self._done_event.set()
