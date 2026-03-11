@@ -143,6 +143,12 @@ with TrinoProgress(conn, query_id="20260310_143549_08022_abc") as tp:
     tp.wait()
 ```
 
+## Claude Code Integration
+
+trinops ships with a [Claude Code skill](skills/trinops/SKILL.md) that teaches Claude how to query and inspect Trino cluster activity. If you have trinops installed in a project, Claude can use `trinops queries --select` and `trinops query <id> --select` to investigate query performance, find long-running queries, and diagnose failures with minimal context usage.
+
+A [Claude Code plugin](/.claude-plugin/plugin.json) is also included for marketplace discoverability.
+
 ## Requirements
 
 - Python 3.10+
