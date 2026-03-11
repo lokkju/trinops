@@ -1,6 +1,15 @@
 # trinops
 
+[![CI](https://github.com/lokkju/trinops/actions/workflows/test.yml/badge.svg)](https://github.com/lokkju/trinops/actions/workflows/test.yml)
+[![PyPI](https://img.shields.io/pypi/v/trinops)](https://pypi.org/project/trinops/)
+[![Python](https://img.shields.io/pypi/pyversions/trinops)](https://pypi.org/project/trinops/)
+[![License](https://img.shields.io/badge/license-PolyForm%20Shield-blue)](https://polyformproject.org/licenses/shield/1.0.0/)
+
 Trino query monitoring from the terminal. CLI commands for listing and inspecting queries, a live TUI dashboard, and a progress-tracking library for use in Python scripts.
+
+<p align="center">
+  <img src="docs/tui-screenshot.svg" alt="trinops TUI dashboard" width="100%">
+</p>
 
 ## Installation
 
@@ -8,12 +17,10 @@ Trino query monitoring from the terminal. CLI commands for listing and inspectin
 pip install trinops
 ```
 
-With optional extras:
+The default install includes the CLI and TUI dashboard. For tqdm progress bars in library usage:
 
 ```bash
-pip install trinops[tui]   # TUI dashboard
-pip install trinops[tqdm]  # tqdm progress bars
-pip install trinops[all]   # everything
+pip install trinops[tqdm]
 ```
 
 ## Quick Start
@@ -114,11 +121,26 @@ For `basic` auth, trinops uses the system keyring to store passwords securely.
 
 ## Library Usage
 
+Wrap a trino cursor or connection to get live progress display during query execution:
+
 ```python
+import trino
 from trinops import TrinoProgress
 
-with TrinoProgress(host="trino.example.com", port=443) as tp:
-    result = tp.execute("SELECT * FROM catalog.schema.table")
+conn = trino.dbapi.connect(host="trino.example.com", port=443, user="myuser")
+cursor = conn.cursor()
+
+with TrinoProgress(cursor) as tp:
+    tp.execute("SELECT * FROM catalog.schema.table")
+    rows = tp.fetchall()
+```
+
+You can also monitor an already-running query by passing a connection and query ID:
+
+```python
+with TrinoProgress(conn, query_id="20260310_143549_08022_abc") as tp:
+    tp.start()
+    tp.wait()
 ```
 
 ## Requirements
