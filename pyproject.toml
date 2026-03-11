@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trino-progress"
+version = "0.1.0"
+description = "Real-time query progress monitoring for Trino"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dependencies = [
+    "trino>=0.320",
+]
+
+[project.optional-dependencies]
+tqdm = ["tqdm>=4.60"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "tqdm>=4.60",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trino_progress"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,1 @@
+"""Stderr-based progress display."""

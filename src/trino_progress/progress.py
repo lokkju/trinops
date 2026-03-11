@@ -1,0 +1,1 @@
+"""Main TrinoProgress entry point."""
