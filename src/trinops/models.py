@@ -77,3 +77,45 @@ class QueryInfo:
             error_code=row.get("error_code"),
             error_message=row.get("error_message"),
         )
+
+    @classmethod
+    def from_rest_response(cls, data: dict) -> QueryInfo:
+        """Build QueryInfo from Trino REST API JSON (BasicQueryInfo or QueryInfo)."""
+        from trinops.formatting import parse_duration_millis, parse_data_size_bytes
+
+        stats = data.get("queryStats", {})
+        session = data.get("session", {})
+
+        error_code = None
+        error_message = None
+        if data.get("errorCode"):
+            error_code = data["errorCode"].get("name")
+        failure_info = data.get("failureInfo")
+        if failure_info:
+            error_message = failure_info.get("message")
+
+        created = None
+        if stats.get("createTime"):
+            created = datetime.fromisoformat(stats["createTime"].replace("Z", "+00:00"))
+        ended = None
+        if stats.get("endTime"):
+            ended = datetime.fromisoformat(stats["endTime"].replace("Z", "+00:00"))
+
+        return cls(
+            query_id=data["queryId"],
+            state=QueryState(data["state"]),
+            query=data.get("query", ""),
+            user=session.get("user", ""),
+            source=session.get("source"),
+            created=created,
+            ended=ended,
+            cpu_time_millis=parse_duration_millis(stats.get("totalCpuTime", "0.00ns")),
+            elapsed_time_millis=parse_duration_millis(stats.get("elapsedTime", "0.00ns")),
+            queued_time_millis=parse_duration_millis(stats.get("queuedTime", "0.00ns")),
+            peak_memory_bytes=parse_data_size_bytes(stats.get("peakUserMemoryReservation", "0B")),
+            cumulative_memory_bytes=int(stats.get("cumulativeUserMemory", 0)),
+            processed_rows=int(stats.get("processedInputPositions", 0)),
+            processed_bytes=parse_data_size_bytes(stats.get("physicalInputDataSize", "0B")),
+            error_code=error_code,
+            error_message=error_message,
+        )
