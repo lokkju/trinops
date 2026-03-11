@@ -26,9 +26,17 @@ def _status(message: str):
 app = typer.Typer(name="trinops", help="Trino query monitoring tool", invoke_without_command=True)
 
 
+def _version_callback(value: bool):
+    if value:
+        import trinops
+        typer.echo(f"trinops {trinops.__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
+    version: bool = typer.Option(False, "--version", "-V", callback=_version_callback, is_eager=True, help="Show version and exit"),
     debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
 ):
     """Trino query monitoring tool."""
