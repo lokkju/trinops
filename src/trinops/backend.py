@@ -317,6 +317,31 @@ class HttpQueryBackend:
                     return None
             raise
 
+    def _delete(self, path: str) -> int:
+        """Send a DELETE request. Returns the HTTP status code."""
+        url = f"{self._base_url}{path}"
+        if self._session is not None:
+            response = self._session.delete(url, timeout=30)
+            return response.status_code
+        request = Request(url, method="DELETE", headers=self._headers)
+        try:
+            with urlopen(request, timeout=30) as response:
+                return response.status
+        except HTTPError as e:
+            return e.code
+
+    def kill_query(self, query_id: str) -> bool:
+        """Kill a query via DELETE /v1/query/{id}. Returns True on success, False if gone."""
+        status = self._delete(f"/v1/query/{query_id}")
+        if status in (200, 204):
+            return True
+        if status in (404, 410):
+            return False
+        raise HTTPError(
+            f"{self._base_url}/v1/query/{query_id}",
+            status, f"Kill query failed (HTTP {status})", {}, None,
+        )
+
     def _try_optional_endpoint(self, path: str, state_attr: str) -> Optional[dict]:
         """Fetch an optional endpoint with tri-state availability tracking.
 

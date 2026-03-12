@@ -46,6 +46,12 @@ class TrinopsClient:
             return self._backend.get_query_raw(query_id)
         return None
 
+    def kill_query(self, query_id: str) -> bool:
+        """Kill a query. Returns True on success, False if already gone."""
+        if hasattr(self._backend, "kill_query"):
+            return self._backend.kill_query(query_id)
+        raise NotImplementedError("kill_query requires HTTP backend")
+
     def build_cluster_stats(self, queries: list[QueryInfo]) -> ClusterStats:
         """Build cluster stats from queries and optional REST endpoints."""
         stats = ClusterStats.from_queries(queries)

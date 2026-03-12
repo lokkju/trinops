@@ -62,6 +62,19 @@ class FakeTrinoAPI(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def do_DELETE(self):
+        from urllib.parse import urlparse
+        path = urlparse(self.path).path
+        if path.startswith("/v1/query/"):
+            qid = path.split("/")[-1]
+            if qid == BASIC_QUERY_INFO["queryId"]:
+                self.send_response(204)
+                self.end_headers()
+            else:
+                self.send_error(410, "Gone")
+        else:
+            self.send_error(404)
+
     def _json(self, data):
         body = json.dumps(data).encode()
         self.send_response(200)
@@ -406,3 +419,56 @@ def test_build_cluster_stats_degraded():
         assert stats.total_queries == 1
     finally:
         server.shutdown()
+
+
+# Kill query tests
+
+
+def test_kill_query_success():
+    server = _make_server()
+    port = server.server_address[1]
+    profile = ConnectionProfile(
+        server=f"127.0.0.1:{port}", scheme="http", auth="none", user="dev"
+    )
+    backend = HttpQueryBackend(profile)
+    try:
+        result = backend.kill_query("20260310_143549_08022_abc")
+        assert result is True
+    finally:
+        server.shutdown()
+
+
+def test_kill_query_already_gone():
+    server = _make_server()
+    port = server.server_address[1]
+    profile = ConnectionProfile(
+        server=f"127.0.0.1:{port}", scheme="http", auth="none", user="dev"
+    )
+    backend = HttpQueryBackend(profile)
+    try:
+        result = backend.kill_query("nonexistent")
+        assert result is False
+    finally:
+        server.shutdown()
+
+
+def test_client_kill_query():
+    server = _make_server()
+    port = server.server_address[1]
+    profile = ConnectionProfile(
+        server=f"127.0.0.1:{port}", scheme="http", auth="none", user="dev"
+    )
+    client = TrinopsClient.from_profile(profile)
+    try:
+        assert client.kill_query("20260310_143549_08022_abc") is True
+        assert client.kill_query("nonexistent") is False
+    finally:
+        server.shutdown()
+
+
+def test_client_kill_query_sql_backend_raises():
+    from trinops.backend import SqlQueryBackend
+    profile = ConnectionProfile(server="localhost:8080", scheme="http", auth="none", user="dev")
+    client = TrinopsClient(backend=SqlQueryBackend(profile), profile=profile)
+    with pytest.raises(NotImplementedError):
+        client.kill_query("some_id")
