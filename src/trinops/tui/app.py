@@ -319,6 +319,10 @@ class TrinopsApp(App):
         pane.remove_class("visible")
         self.query_one("#query-table", DataTable).focus()
 
+    def action_quit(self) -> None:
+        self.workers.cancel_all()
+        self.exit()
+
     def action_refresh(self) -> None:
         self._schedule_refresh()
         self._schedule_stats_refresh()
