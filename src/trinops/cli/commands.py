@@ -210,6 +210,54 @@ def query(
 
 
 @app.command()
+def kill(
+    query_id: str = typer.Argument(help="Trino query ID to kill"),
+    server: Optional[str] = typer.Option(None, help="Trino server host:port"),
+    profile: Optional[str] = typer.Option(None, help="Config profile name"),
+    user: Optional[str] = typer.Option(None, help="Trino user"),
+    auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """Kill a running query."""
+    cp = _build_profile(server=server, profile=profile, user=user, auth=auth)
+    if not cp.allow_kill:
+        typer.echo("Kill is disabled (allow_kill = false in config)", err=True)
+        raise typer.Exit(1)
+
+    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend="http")
+
+    try:
+        if cp.confirm_kill and not yes:
+            with _status("Loading query..."):
+                qi = client.get_query(query_id)
+            if qi is None:
+                typer.echo(f"Query {query_id} not found", err=True)
+                raise typer.Exit(1)
+            typer.confirm(
+                f"Kill query {qi.query_id} by {qi.user}? [{qi.truncated_sql(80)}]",
+                abort=True,
+            )
+
+        with _status("Killing query..."):
+            result = client.kill_query(query_id)
+
+        if result:
+            typer.echo(f"Query {query_id} killed")
+        else:
+            typer.echo(f"Query {query_id} not found (already completed?)")
+    except typer.Exit:
+        raise
+    except typer.Abort:
+        raise
+    except NotImplementedError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Failed to kill query: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
 def tui(
     server: Optional[str] = typer.Option(None, help="Trino server host:port"),
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
