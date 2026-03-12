@@ -6,7 +6,8 @@ from typing import Optional
 
 from trinops.backend import QueryBackend, HttpQueryBackend, SqlQueryBackend
 from trinops.config import ConnectionProfile
-from trinops.models import QueryInfo
+from trinops.formatting import parse_duration_millis
+from trinops.models import ClusterStats, QueryInfo
 
 
 class TrinopsClient:
@@ -44,6 +45,33 @@ class TrinopsClient:
         if hasattr(self._backend, "get_query_raw"):
             return self._backend.get_query_raw(query_id)
         return None
+
+    def build_cluster_stats(self, queries: list[QueryInfo]) -> ClusterStats:
+        """Build cluster stats from queries and optional REST endpoints."""
+        stats = ClusterStats.from_queries(queries)
+        if not isinstance(self._backend, HttpQueryBackend):
+            return stats
+
+        info = self._backend.get_info()
+        if info is not None:
+            version_obj = info.get("nodeVersion")
+            if isinstance(version_obj, dict):
+                stats.trino_version = version_obj.get("version")
+            uptime_str = info.get("uptime")
+            if uptime_str:
+                try:
+                    stats.uptime_millis = parse_duration_millis(uptime_str)
+                except ValueError:
+                    pass
+            stats.starting = info.get("starting")
+
+        cluster = self._backend.get_cluster()
+        if cluster is not None:
+            workers = cluster.get("activeWorkers")
+            if workers is not None:
+                stats.active_workers = int(workers)
+
+        return stats
 
     def close(self) -> None:
         self._backend.close()

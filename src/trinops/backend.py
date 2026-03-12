@@ -7,9 +7,21 @@ import gzip
 import json
 import logging
 import time
+from enum import Enum
 from typing import Optional, Protocol, runtime_checkable
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+
+
+class EndpointState(Enum):
+    """Tri-state availability for optional REST endpoints."""
+    UNKNOWN = "unknown"
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+
+
+# HTTP status codes that permanently mark an endpoint as unavailable
+_PERMANENT_FAIL_CODES = {404, 405, 501}
 
 try:
     import orjson as _json
@@ -179,6 +191,8 @@ class HttpQueryBackend:
         self._base_url = f"{profile.scheme}://{host}:{port}"
         self._session = None  # requests.Session, used for oauth2/kerberos
         self._headers = self._build_auth(profile)
+        self._info_state = EndpointState.UNKNOWN
+        self._cluster_state = EndpointState.UNKNOWN
 
     def _build_auth(self, profile: ConnectionProfile) -> dict[str, str]:
         """Build auth headers, or configure a requests.Session for complex auth."""
@@ -302,6 +316,42 @@ class HttpQueryBackend:
                 if e.response is not None and e.response.status_code in (404, 410):
                     return None
             raise
+
+    def _try_optional_endpoint(self, path: str, state_attr: str) -> Optional[dict]:
+        """Fetch an optional endpoint with tri-state availability tracking.
+
+        Returns the parsed JSON on success, or None on failure/unavailability.
+        Updates the availability flag stored in *state_attr*.
+        """
+        current = getattr(self, state_attr)
+        if current == EndpointState.UNAVAILABLE:
+            return None
+        try:
+            data = self._get_json(path)
+            setattr(self, state_attr, EndpointState.AVAILABLE)
+            return data
+        except HTTPError as e:
+            if e.code in _PERMANENT_FAIL_CODES:
+                setattr(self, state_attr, EndpointState.UNAVAILABLE)
+            _log.debug("Optional endpoint %s failed: %s", path, e)
+            return None
+        except Exception as e:
+            # Handle requests-style exceptions (session path)
+            status = None
+            if hasattr(e, "response") and e.response is not None:
+                status = e.response.status_code
+            if status in _PERMANENT_FAIL_CODES:
+                setattr(self, state_attr, EndpointState.UNAVAILABLE)
+            _log.debug("Optional endpoint %s failed: %s", path, e)
+            return None
+
+    def get_info(self) -> Optional[dict]:
+        """Fetch /v1/info. Returns None if unavailable."""
+        return self._try_optional_endpoint("/v1/info", "_info_state")
+
+    def get_cluster(self) -> Optional[dict]:
+        """Fetch /v1/cluster. Returns None if unavailable."""
+        return self._try_optional_endpoint("/v1/cluster", "_cluster_state")
 
     def check_connection(self) -> None:
         """Verify server reachability and auth. Raises on failure."""

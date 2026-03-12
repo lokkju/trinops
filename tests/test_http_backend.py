@@ -9,7 +9,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from trinops.backend import HttpQueryBackend, QueryBackend
+from trinops.backend import HttpQueryBackend, QueryBackend, EndpointState
+from trinops.client import TrinopsClient
 from trinops.config import ConnectionProfile
 from trinops.models import QueryState
 
@@ -48,7 +49,7 @@ class FakeTrinoAPI(BaseHTTPRequestHandler):
                 self._json(BASIC_QUERY_INFO)
             else:
                 self.send_error(410, "Gone")
-        elif self.path == "/v1/info":
+        elif path == "/v1/info":
             self._json(
                 {
                     "nodeVersion": {"version": "449"},
@@ -56,6 +57,8 @@ class FakeTrinoAPI(BaseHTTPRequestHandler):
                     "starting": False,
                 }
             )
+        elif path == "/v1/cluster":
+            self._json({"activeWorkers": 8})
         else:
             self.send_error(404)
 
@@ -239,5 +242,167 @@ def test_http_backend_basic_auth_header():
         backend.list_queries()
         expected = "Basic " + base64.b64encode(b"testuser:testpass").decode()
         assert handler_cls.received_auth == expected
+    finally:
+        server.shutdown()
+
+
+# Cluster info endpoint tests
+
+
+def test_get_info_success():
+    server = _make_server()
+    port = server.server_address[1]
+    profile = ConnectionProfile(
+        server=f"127.0.0.1:{port}", scheme="http", auth="none", user="dev"
+    )
+    backend = HttpQueryBackend(profile)
+    try:
+        info = backend.get_info()
+        assert info is not None
+        assert info["nodeVersion"]["version"] == "449"
+        assert backend._info_state == EndpointState.AVAILABLE
+    finally:
+        server.shutdown()
+
+
+def test_get_cluster_success():
+    server = _make_server()
+    port = server.server_address[1]
+    profile = ConnectionProfile(
+        server=f"127.0.0.1:{port}", scheme="http", auth="none", user="dev"
+    )
+    backend = HttpQueryBackend(profile)
+    try:
+        data = backend.get_cluster()
+        assert data is not None
+        assert data["activeWorkers"] == 8
+        assert backend._cluster_state == EndpointState.AVAILABLE
+    finally:
+        server.shutdown()
+
+
+class FakeNoClusterAPI(BaseHTTPRequestHandler):
+    """Trino version that doesn't support /v1/cluster."""
+
+    def do_GET(self):
+        from urllib.parse import urlparse
+        path = urlparse(self.path).path
+        if path == "/v1/query":
+            self._json([BASIC_QUERY_INFO])
+        elif path == "/v1/info":
+            self._json({"nodeVersion": {"version": "400"}, "uptime": "2.00h", "starting": False})
+        elif path == "/v1/cluster":
+            self.send_error(404)
+        else:
+            self.send_error(404)
+
+    def _json(self, data):
+        body = json.dumps(data).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, fmt, *args):
+        pass
+
+
+def test_get_cluster_404_marks_unavailable():
+    server = _make_server(FakeNoClusterAPI)
+    port = server.server_address[1]
+    profile = ConnectionProfile(
+        server=f"127.0.0.1:{port}", scheme="http", auth="none", user="dev"
+    )
+    backend = HttpQueryBackend(profile)
+    try:
+        result = backend.get_cluster()
+        assert result is None
+        assert backend._cluster_state == EndpointState.UNAVAILABLE
+        # Second call should skip the request entirely
+        result2 = backend.get_cluster()
+        assert result2 is None
+    finally:
+        server.shutdown()
+
+
+class FakeTransientErrorAPI(BaseHTTPRequestHandler):
+    call_count = 0
+
+    def do_GET(self):
+        from urllib.parse import urlparse
+        path = urlparse(self.path).path
+        if path == "/v1/cluster":
+            self.__class__.call_count += 1
+            self.send_error(500)
+        elif path == "/v1/info":
+            self._json({"nodeVersion": {"version": "449"}, "uptime": "1.00h", "starting": False})
+        else:
+            self.send_error(404)
+
+    def _json(self, data):
+        body = json.dumps(data).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, fmt, *args):
+        pass
+
+
+def test_transient_error_does_not_mark_unavailable():
+    handler_cls = type("H", (FakeTransientErrorAPI,), {"call_count": 0})
+    server = _make_server(handler_cls)
+    port = server.server_address[1]
+    profile = ConnectionProfile(
+        server=f"127.0.0.1:{port}", scheme="http", auth="none", user="dev"
+    )
+    backend = HttpQueryBackend(profile)
+    try:
+        result = backend.get_cluster()
+        assert result is None
+        # Should still be UNKNOWN (not UNAVAILABLE) — will retry next time
+        assert backend._cluster_state == EndpointState.UNKNOWN
+        # Second call should still attempt the request
+        backend.get_cluster()
+        assert handler_cls.call_count == 2
+    finally:
+        server.shutdown()
+
+
+def test_build_cluster_stats_full():
+    server = _make_server()
+    port = server.server_address[1]
+    profile = ConnectionProfile(
+        server=f"127.0.0.1:{port}", scheme="http", auth="none", user="dev"
+    )
+    client = TrinopsClient.from_profile(profile)
+    try:
+        queries = client.list_queries()
+        stats = client.build_cluster_stats(queries)
+        assert stats.trino_version == "449"
+        assert stats.uptime_millis == 3_600_000
+        assert stats.active_workers == 8
+        assert stats.total_queries == 1
+        assert stats.running == 1
+    finally:
+        server.shutdown()
+
+
+def test_build_cluster_stats_degraded():
+    server = _make_server(FakeNoClusterAPI)
+    port = server.server_address[1]
+    profile = ConnectionProfile(
+        server=f"127.0.0.1:{port}", scheme="http", auth="none", user="dev"
+    )
+    client = TrinopsClient.from_profile(profile)
+    try:
+        queries = client.list_queries()
+        stats = client.build_cluster_stats(queries)
+        assert stats.trino_version == "400"
+        assert stats.active_workers is None
+        assert stats.total_queries == 1
     finally:
         server.shutdown()
