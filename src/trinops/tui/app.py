@@ -4,9 +4,10 @@ import time
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container
+from textual.containers import Container, Horizontal
 from textual.reactive import reactive
-from textual.widgets import DataTable, Footer, Header, Static, TextArea
+from textual.screen import ModalScreen
+from textual.widgets import Button, DataTable, Footer, Header, Label, Static, TextArea
 from textual.timer import Timer
 from textual.worker import Worker, WorkerState
 
@@ -14,6 +15,65 @@ from trinops.client import TrinopsClient
 from trinops.config import ConnectionProfile
 from trinops.formatting import format_bytes as _format_bytes, format_time_millis as _format_time
 from trinops.models import ClusterStats, QueryInfo
+
+
+class KillConfirmScreen(ModalScreen[bool]):
+    """Confirmation dialog for killing a query."""
+
+    DEFAULT_CSS = """
+    KillConfirmScreen {
+        align: center middle;
+    }
+    #kill-dialog {
+        width: 70;
+        height: auto;
+        max-height: 80%;
+        border: thick $error;
+        background: $surface;
+        padding: 1 2;
+    }
+    #kill-dialog Label {
+        width: 100%;
+        margin-bottom: 1;
+    }
+    #kill-buttons {
+        width: 100%;
+        height: 3;
+        align: center middle;
+    }
+    #kill-buttons Button {
+        margin: 0 1;
+    }
+    """
+
+    BINDINGS = [
+        ("y", "confirm", "Yes"),
+        ("n", "cancel", "No"),
+        ("escape", "cancel", "Cancel"),
+    ]
+
+    def __init__(self, query_id: str, user: str, sql_preview: str) -> None:
+        super().__init__()
+        self._query_id = query_id
+        self._user = user
+        self._sql_preview = sql_preview
+
+    def compose(self) -> ComposeResult:
+        with Container(id="kill-dialog"):
+            yield Label(f"Kill query {self._query_id} by {self._user}?")
+            yield Label(self._sql_preview)
+            with Horizontal(id="kill-buttons"):
+                yield Button("Yes", variant="error", id="kill-yes")
+                yield Button("No", variant="primary", id="kill-no")
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(event.button.id == "kill-yes")
 
 
 class ClusterHeader(Static):
@@ -94,6 +154,7 @@ class TrinopsApp(App):
         Binding("+", "interval_down", "", show=False),
         ("tab", "focus_next", "Next pane"),
         ("shift+tab", "focus_previous", "Prev pane"),
+        Binding("k", "kill_query", "Kill query", show=False),
     ]
 
     INTERVAL_STEPS = [5, 10, 15, 30, 60, 120, 300]
@@ -113,6 +174,9 @@ class TrinopsApp(App):
         self._stats_refreshing = False
         self._last_refresh: float = 0.0
         self._loaded = False
+        self._flash_message: str | None = None
+        self._flash_timer: Timer | None = None
+        self._kill_query_id: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -130,6 +194,14 @@ class TrinopsApp(App):
         table = self.query_one("#query-table", DataTable)
         table.add_columns("Query ID", "State", "User", "Elapsed", "Rows", "Memory", "SQL")
         table.cursor_type = "row"
+
+        # Show kill binding in footer only when allow_kill is enabled
+        if self._profile.allow_kill:
+            for binding in self._bindings:
+                if binding.action == "kill_query":
+                    binding.show = True
+                    break
+
         self._update_status_bar()
         self._refresh_timer = self.set_interval(self._interval, self._schedule_refresh)
         self._stats_timer = self.set_interval(self._interval, self._schedule_stats_refresh)
@@ -157,6 +229,11 @@ class TrinopsApp(App):
 
         count = len(self._queries)
         count_text = f"{count} queries" if self._loaded else ""
+
+        if self._flash_message:
+            bar.update(self._flash_message)
+            bar.set_class(False, "loading")
+            return
 
         parts = [user_label]
         if count_text:
@@ -204,6 +281,8 @@ class TrinopsApp(App):
             self._on_queries_done(event)
         elif event.worker.name == "_fetch_stats":
             self._on_stats_done(event)
+        elif event.worker.name == "_do_kill_query":
+            self._on_kill_done(event)
 
     def _on_queries_done(self, event: Worker.StateChanged) -> None:
         if event.state == WorkerState.SUCCESS:
@@ -225,6 +304,35 @@ class TrinopsApp(App):
             header = self.query_one("#cluster-header", ClusterHeader)
             header.update_stats(event.worker.result)
         self._stats_refreshing = False
+
+    def _on_kill_done(self, event: Worker.StateChanged) -> None:
+        qid = self._kill_query_id
+        self._kill_query_id = None
+        if event.state == WorkerState.SUCCESS:
+            if event.worker.result:
+                self._flash(f"Killed {qid}")
+            else:
+                self._flash(f"Query {qid} already completed")
+            self._schedule_refresh()
+        elif event.state == WorkerState.ERROR:
+            self._flash(f"Kill failed: {event.worker.error}")
+
+    def _do_kill_query(self, query_id: str) -> bool:
+        if self._client is None:
+            self._client = TrinopsClient.from_profile(self._profile)
+        return self._client.kill_query(query_id)
+
+    def _flash(self, message: str, duration: float = 3.0) -> None:
+        self._flash_message = message
+        self._update_status_bar()
+        if self._flash_timer is not None:
+            self._flash_timer.stop()
+        self._flash_timer = self.set_timer(duration, self._clear_flash)
+
+    def _clear_flash(self) -> None:
+        self._flash_message = None
+        self._flash_timer = None
+        self._update_status_bar()
 
     def _update_table(self) -> None:
         table = self.query_one("#query-table", DataTable)
@@ -332,6 +440,40 @@ class TrinopsApp(App):
 
     def action_show_all(self) -> None:
         self.show_all_users = True
+
+    def action_kill_query(self) -> None:
+        if not self._profile.allow_kill:
+            return
+        table = self.query_one("#query-table", DataTable)
+        if table.row_count == 0 or table.cursor_row is None:
+            return
+        try:
+            query_id = str(table.get_row_at(table.cursor_row)[0])
+        except Exception:
+            return
+        qi = None
+        for q in self._queries:
+            if q.query_id == query_id:
+                qi = q
+                break
+        if qi is None:
+            return
+
+        if self._profile.confirm_kill:
+            def on_confirm(confirmed: bool) -> None:
+                if confirmed:
+                    self._execute_kill(qi.query_id)
+            self.push_screen(
+                KillConfirmScreen(qi.query_id, qi.user, qi.truncated_sql(80)),
+                on_confirm,
+            )
+        else:
+            self._execute_kill(qi.query_id)
+
+    def _execute_kill(self, query_id: str) -> None:
+        self._kill_query_id = query_id
+        self._flash(f"Killing {query_id}...")
+        self.run_worker(lambda: self._do_kill_query(query_id), thread=True, name="_do_kill_query")
 
     def action_interval_down(self) -> None:
         steps = self.INTERVAL_STEPS
