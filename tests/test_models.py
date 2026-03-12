@@ -1,5 +1,5 @@
 from datetime import datetime
-from trinops.models import QueryInfo, QueryState
+from trinops.models import QueryInfo, QueryState, ClusterStats
 
 
 def test_query_info_creation():
@@ -146,3 +146,110 @@ def test_query_info_from_rest_response_with_error():
     assert qi.state == QueryState.FAILED
     assert qi.error_code == "SYNTAX_ERROR"
     assert qi.error_message == "line 1:8: Column 'bad' cannot be resolved"
+
+
+# ClusterStats tests
+
+
+def _make_queries():
+    return [
+        QueryInfo(
+            query_id="q1", state=QueryState.RUNNING, query="SELECT 1", user="a",
+            cpu_time_millis=5000, peak_memory_bytes=100_000,
+            processed_rows=1_000_000, processed_bytes=500_000,
+        ),
+        QueryInfo(
+            query_id="q2", state=QueryState.RUNNING, query="SELECT 2", user="b",
+            cpu_time_millis=3000, peak_memory_bytes=200_000,
+            processed_rows=2_000_000, processed_bytes=300_000,
+        ),
+        QueryInfo(
+            query_id="q3", state=QueryState.QUEUED, query="SELECT 3", user="a",
+            cpu_time_millis=0, peak_memory_bytes=0,
+            processed_rows=0, processed_bytes=0,
+        ),
+        QueryInfo(
+            query_id="q4", state=QueryState.FINISHED, query="SELECT 4", user="c",
+            cpu_time_millis=10000, peak_memory_bytes=500_000,
+            processed_rows=5_000_000, processed_bytes=1_000_000,
+        ),
+        QueryInfo(
+            query_id="q5", state=QueryState.FAILED, query="SELECT bad", user="a",
+            cpu_time_millis=100, peak_memory_bytes=1000,
+            processed_rows=0, processed_bytes=0,
+            error_code="SYNTAX_ERROR",
+        ),
+    ]
+
+
+def test_cluster_stats_from_queries():
+    queries = _make_queries()
+    stats = ClusterStats.from_queries(queries)
+    assert stats.total_queries == 5
+    assert stats.running == 2
+    assert stats.queued == 1
+    assert stats.finished == 1
+    assert stats.failed == 1
+    assert stats.total_cpu_millis == 18100
+    assert stats.total_peak_memory_bytes == 801_000
+    assert stats.total_processed_rows == 8_000_000
+    assert stats.total_processed_bytes == 1_800_000
+
+
+def test_cluster_stats_from_empty_queries():
+    stats = ClusterStats.from_queries([])
+    assert stats.total_queries == 0
+    assert stats.running == 0
+    assert stats.total_cpu_millis == 0
+
+
+def test_cluster_stats_format_line_full():
+    stats = ClusterStats(
+        trino_version="449",
+        uptime_millis=266_400_000,
+        active_workers=8,
+        total_queries=47, running=12, queued=3, finished=32, failed=0,
+        total_cpu_millis=2_712_000,
+        total_peak_memory_bytes=133_743_869_952,
+        total_processed_rows=1_200_000_000,
+        total_processed_bytes=365_072_220_160,
+    )
+    line = stats.format_line(width=200)
+    assert "trino 449" in line
+    assert "8 workers" in line
+    assert "12 run" in line
+    assert "3 queued" in line
+    assert "32 done" in line
+    assert "0 failed" not in line  # zero states omitted
+    assert "up 3d2h" in line
+
+
+def test_cluster_stats_format_line_degraded():
+    stats = ClusterStats(
+        total_queries=5, running=2, queued=1, finished=1, failed=1,
+        total_cpu_millis=18100,
+        total_peak_memory_bytes=801_000,
+        total_processed_rows=8_000_000,
+        total_processed_bytes=1_800_000,
+    )
+    line = stats.format_line(width=200)
+    assert "trino" not in line
+    assert "workers" not in line
+    assert "up " not in line
+    assert "2 run" in line
+    assert "1 failed" in line
+
+
+def test_cluster_stats_format_line_wraps():
+    stats = ClusterStats(
+        trino_version="449",
+        uptime_millis=266_400_000,
+        active_workers=8,
+        total_queries=47, running=12, queued=3, finished=32, failed=0,
+        total_cpu_millis=2_712_000,
+        total_peak_memory_bytes=133_743_869_952,
+        total_processed_rows=1_200_000_000,
+        total_processed_bytes=365_072_220_160,
+    )
+    line = stats.format_line(width=40)
+    assert "\n" in line

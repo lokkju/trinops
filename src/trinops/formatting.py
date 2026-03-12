@@ -50,3 +50,30 @@ def format_time_millis(millis: int) -> str:
         return f"{minutes:.1f}m"
     hours = minutes / 60
     return f"{hours:.1f}h"
+
+
+def format_compact_number(n: int) -> str:
+    """Format large numbers compactly: 1.2B, 34.1M, 5.6K, or raw int if < 1000."""
+    if n < 1_000:
+        return str(n)
+    if n < 1_000_000:
+        return f"{n / 1_000:.1f}K"
+    if n < 1_000_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    return f"{n / 1_000_000_000:.1f}B"
+
+
+def format_compact_uptime(millis: int) -> str:
+    """Format milliseconds as compact uptime: 3d2h, 5h12m, 5m12s, 45s."""
+    total_seconds = millis // 1000
+    days = total_seconds // 86400
+    hours = (total_seconds % 86400) // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    if days > 0:
+        return f"{days}d{hours}h"
+    if hours > 0:
+        return f"{hours}h{minutes}m"
+    if minutes > 0:
+        return f"{minutes}m{seconds}s"
+    return f"{seconds}s"

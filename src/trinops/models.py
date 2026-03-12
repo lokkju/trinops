@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -150,3 +150,106 @@ class QueryInfo:
             error_code=error_code,
             error_message=error_message,
         )
+
+
+_QUEUED_STATES = {
+    QueryState.QUEUED, QueryState.WAITING_FOR_RESOURCES,
+    QueryState.DISPATCHING, QueryState.PLANNING, QueryState.STARTING,
+}
+_RUNNING_STATES = {QueryState.RUNNING, QueryState.FINISHING}
+
+
+@dataclass
+class ClusterStats:
+    """Aggregated cluster status for the TUI header."""
+
+    # From /v1/info (optional)
+    trino_version: Optional[str] = None
+    uptime_millis: Optional[int] = None
+    starting: Optional[bool] = None
+
+    # From /v1/cluster (optional)
+    active_workers: Optional[int] = None
+
+    # Aggregated from query list
+    total_queries: int = 0
+    running: int = 0
+    queued: int = 0
+    finished: int = 0
+    failed: int = 0
+    total_cpu_millis: int = 0
+    total_peak_memory_bytes: int = 0
+    total_processed_rows: int = 0
+    total_processed_bytes: int = 0
+
+    @classmethod
+    def from_queries(cls, queries: list[QueryInfo]) -> ClusterStats:
+        running = queued = finished = failed = 0
+        cpu = mem = rows = data = 0
+        for q in queries:
+            if q.state in _RUNNING_STATES:
+                running += 1
+            elif q.state in _QUEUED_STATES:
+                queued += 1
+            elif q.state == QueryState.FINISHED:
+                finished += 1
+            elif q.state == QueryState.FAILED:
+                failed += 1
+            cpu += q.cpu_time_millis
+            mem += q.peak_memory_bytes
+            rows += q.processed_rows
+            data += q.processed_bytes
+        return cls(
+            total_queries=len(queries),
+            running=running, queued=queued, finished=finished, failed=failed,
+            total_cpu_millis=cpu, total_peak_memory_bytes=mem,
+            total_processed_rows=rows, total_processed_bytes=data,
+        )
+
+    def format_line(self, width: int = 120) -> str:
+        """Render stats as a dense, pipe-separated string that wraps at *width*."""
+        from trinops.formatting import (
+            format_bytes, format_time_millis,
+            format_compact_number, format_compact_uptime,
+        )
+
+        segments: list[str] = []
+        if self.trino_version:
+            segments.append(f"trino {self.trino_version}")
+        if self.active_workers is not None:
+            segments.append(f"{self.active_workers} workers")
+
+        # Query breakdown — omit zero-count states
+        parts = [f"{self.total_queries} queries:"]
+        if self.running:
+            parts.append(f"{self.running} run")
+        if self.queued:
+            parts.append(f"{self.queued} queued")
+        if self.finished:
+            parts.append(f"{self.finished} done")
+        if self.failed:
+            parts.append(f"{self.failed} failed")
+        segments.append(" ".join(parts))
+
+        segments.append(f"{format_bytes(self.total_peak_memory_bytes)} mem")
+        segments.append(f"{format_time_millis(self.total_cpu_millis)} cpu")
+        segments.append(f"{format_compact_number(self.total_processed_rows)} rows")
+        segments.append(f"{format_bytes(self.total_processed_bytes)} data")
+
+        if self.uptime_millis is not None:
+            segments.append(f"up {format_compact_uptime(self.uptime_millis)}")
+
+        # Pack segments into lines, wrapping when width exceeded
+        sep = " \u2502 "
+        lines: list[str] = []
+        current = ""
+        for seg in segments:
+            candidate = (current + sep + seg) if current else seg
+            if current and len(candidate) > width:
+                lines.append(current)
+                current = seg
+            else:
+                current = candidate
+        if current:
+            lines.append(current)
+        return "\n".join(lines)
