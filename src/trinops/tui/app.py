@@ -13,7 +13,24 @@ from textual.worker import Worker, WorkerState
 from trinops.client import TrinopsClient
 from trinops.config import ConnectionProfile
 from trinops.formatting import format_bytes as _format_bytes, format_time_millis as _format_time
-from trinops.models import QueryInfo
+from trinops.models import ClusterStats, QueryInfo
+
+
+class ClusterHeader(Static):
+    """Dense cluster status line, similar to top's summary header."""
+
+    DEFAULT_CSS = """
+    ClusterHeader {
+        height: auto;
+        background: $panel;
+        color: $text;
+        padding: 0 1;
+    }
+    """
+
+    def update_stats(self, stats: ClusterStats) -> None:
+        width = max(self.size.width - 2, 40)  # account for padding
+        self.update(stats.format_line(width=width))
 
 
 class StatusBar(Static):
@@ -87,13 +104,16 @@ class TrinopsApp(App):
         self._client: TrinopsClient | None = None
         self._queries: list[QueryInfo] = []
         self._refresh_timer: Timer | None = None
+        self._stats_timer: Timer | None = None
         self._countdown_timer: Timer | None = None
         self._refreshing = False
+        self._stats_refreshing = False
         self._last_refresh: float = 0.0
         self._loaded = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
+        yield ClusterHeader(id="cluster-header")
         yield DataTable(id="query-table")
         yield Container(
             Static(id="detail-meta"),
@@ -109,8 +129,10 @@ class TrinopsApp(App):
         table.cursor_type = "row"
         self._update_status_bar()
         self._refresh_timer = self.set_interval(self._interval, self._schedule_refresh)
+        self._stats_timer = self.set_interval(self._interval, self._schedule_stats_refresh)
         self._countdown_timer = self.set_interval(0.5, self._update_status_bar)
         self._schedule_refresh()
+        self._schedule_stats_refresh()
 
     def _update_status_bar(self) -> None:
         bar = self.query_one("#status-bar", StatusBar)
@@ -144,6 +166,8 @@ class TrinopsApp(App):
         self._update_status_bar()
         self._schedule_refresh()
 
+    # --- Query worker ---
+
     def _schedule_refresh(self) -> None:
         if self._refreshing:
             return
@@ -157,9 +181,28 @@ class TrinopsApp(App):
         query_user = None if self.show_all_users else self._profile.user
         return self._client.list_queries(limit=self._profile.query_limit, query_user=query_user)
 
-    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        if event.worker.name != "_fetch_queries":
+    # --- Stats worker ---
+
+    def _schedule_stats_refresh(self) -> None:
+        if self._stats_refreshing:
             return
+        self._stats_refreshing = True
+        self.run_worker(self._fetch_stats, thread=True)
+
+    def _fetch_stats(self) -> ClusterStats:
+        if self._client is None:
+            self._client = TrinopsClient.from_profile(self._profile)
+        return self._client.build_cluster_stats(self._queries)
+
+    # --- Worker completion ---
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        if event.worker.name == "_fetch_queries":
+            self._on_queries_done(event)
+        elif event.worker.name == "_fetch_stats":
+            self._on_stats_done(event)
+
+    def _on_queries_done(self, event: Worker.StateChanged) -> None:
         if event.state == WorkerState.SUCCESS:
             self._queries = event.worker.result
             if not self._loaded:
@@ -171,6 +214,12 @@ class TrinopsApp(App):
         elif event.state in (WorkerState.ERROR, WorkerState.CANCELLED):
             self._refreshing = False
             self._update_status_bar()
+
+    def _on_stats_done(self, event: Worker.StateChanged) -> None:
+        if event.state == WorkerState.SUCCESS:
+            header = self.query_one("#cluster-header", ClusterHeader)
+            header.update_stats(event.worker.result)
+        self._stats_refreshing = False
 
     def _update_table(self) -> None:
         table = self.query_one("#query-table", DataTable)
@@ -267,6 +316,7 @@ class TrinopsApp(App):
 
     def action_refresh(self) -> None:
         self._schedule_refresh()
+        self._schedule_stats_refresh()
 
     def action_toggle_user(self) -> None:
         self.show_all_users = not self.show_all_users
@@ -295,4 +345,7 @@ class TrinopsApp(App):
         if self._refresh_timer is not None:
             self._refresh_timer.stop()
         self._refresh_timer = self.set_interval(self._interval, self._schedule_refresh)
+        if self._stats_timer is not None:
+            self._stats_timer.stop()
+        self._stats_timer = self.set_interval(self._interval, self._schedule_stats_refresh)
         self._update_status_bar()
