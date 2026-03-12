@@ -29,7 +29,10 @@ class ClusterHeader(Static):
     """
 
     def update_stats(self, stats: ClusterStats) -> None:
-        width = max(self.size.width - 2, 40)  # account for padding
+        w = self.size.width
+        if w <= 0:
+            w = self.app.size.width if self.app else 120
+        width = max(w - 2, 40)  # account for padding
         self.update(stats.format_line(width=width))
 
 
@@ -211,6 +214,8 @@ class TrinopsApp(App):
             self._last_refresh = time.monotonic()
             self._refreshing = False
             self._update_status_bar()
+            # Trigger stats refresh so header picks up the new query data
+            self._schedule_stats_refresh()
         elif event.state in (WorkerState.ERROR, WorkerState.CANCELLED):
             self._refreshing = False
             self._update_status_bar()
