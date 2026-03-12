@@ -9,7 +9,6 @@ Trinops is a Trino query monitoring tool providing CLI commands, a TUI dashboard
 - Python 3.10+, managed with `uv`
 - Textual for the TUI
 - `requests` (OAuth2/Kerberos) and `urllib` (all other auth) for HTTP
-- `trino.dbapi` for SQL backend
 - `hatch-vcs` for versioning from git tags
 - PyPI publishing via GitHub Actions trusted publishing on tag push
 
@@ -22,7 +21,7 @@ Trinops is a Trino query monitoring tool providing CLI commands, a TUI dashboard
 
 ## Architecture
 
-- `src/trinops/backend.py` — `QueryBackend` protocol, `HttpQueryBackend`, `SqlQueryBackend`
+- `src/trinops/backend.py` — `HttpQueryBackend` (REST API client for Trino)
 - `src/trinops/client.py` — `TrinopsClient` wrapping backends
 - `src/trinops/models.py` — `QueryInfo`, `ClusterStats`, `QueryState`
 - `src/trinops/formatting.py` — Duration/size parsing and compact formatting

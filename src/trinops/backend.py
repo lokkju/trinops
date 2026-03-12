@@ -1,4 +1,4 @@
-"""Query backend protocol and SQL implementation for trinops."""
+"""HTTP query backend for trinops."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import json
 import logging
 import time
 from enum import Enum
-from typing import Optional, Protocol, runtime_checkable
+from typing import Optional
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -32,153 +32,9 @@ _QUERY_PREVIEW_LEN = 300
 
 _log = logging.getLogger(__name__)
 
-import trino.dbapi
-
 from trinops.auth import build_auth, resolve_password
 from trinops.config import ConnectionProfile
 from trinops.models import QueryInfo
-
-
-@runtime_checkable
-class QueryBackend(Protocol):
-    def list_queries(self, state: Optional[str] = None, limit: int = 0, query_user: Optional[str] = None) -> list[QueryInfo]: ...
-    def get_query(self, query_id: str) -> Optional[QueryInfo]: ...
-    def close(self) -> None: ...
-
-
-# Required columns (must exist in all Trino versions)
-_REQUIRED_COLS = ["query_id", "state", "query", '"user"', "source", "created"]
-
-# Optional columns — we try each candidate and use whichever exists.
-# Maps our internal name -> list of candidate column names to try.
-# Time columns: some clusters use seconds (cpu_time), others use millis (queued_time_ms).
-_OPTIONAL_COL_CANDIDATES = {
-    "started": ["started"],
-    "end": ['"end"'],
-    "cpu_time": ["cpu_time", "total_cpu_time"],
-    "wall_time": ["wall_time"],
-    "queued_time": ["queued_time"],
-    "queued_time_ms": ["queued_time_ms"],
-    "elapsed_time": ["elapsed_time"],
-    "analysis_time_ms": ["analysis_time_ms"],
-    "planning_time_ms": ["planning_time_ms"],
-    "peak_memory_bytes": ["peak_memory_bytes"],
-    "cumulative_memory": ["cumulative_memory"],
-    "processed_rows": ["processed_rows"],
-    "processed_bytes": ["processed_bytes"],
-    "error_code": ["error_code"],
-    "error_message": ["error_message"],
-    "error_type": ["error_type"],
-    "resource_group_id": ["resource_group_id"],
-}
-
-
-class SqlQueryBackend:
-    """Queries system.runtime.queries via SQL. Current default backend."""
-
-    def __init__(self, profile: ConnectionProfile) -> None:
-        self._profile = profile
-        self._conn = None
-        self._select_sql: Optional[str] = None
-        self._available_cols: Optional[set[str]] = None
-
-    def _get_connection(self):
-        if self._conn is None:
-            host, _, port_str = self._profile.server.partition(":")
-            port = int(port_str) if port_str else (443 if self._profile.scheme == "https" else 8080)
-            auth = build_auth(self._profile)
-            self._conn = trino.dbapi.connect(
-                host=host,
-                port=port,
-                user=self._profile.user,
-                catalog=self._profile.catalog or "system",
-                schema=self._profile.schema or "runtime",
-                http_scheme=self._profile.scheme,
-                auth=auth,
-            )
-        return self._conn
-
-    def _discover_columns(self) -> None:
-        """Query SHOW COLUMNS once to learn what this cluster has."""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        t0 = time.monotonic()
-        cursor.execute("SHOW COLUMNS FROM system.runtime.queries")
-        rows = cursor.fetchall()
-        self._available_cols = {row[0] for row in rows}
-        _log.debug("Column discovery took %.3fs, found %d columns: %s",
-                   time.monotonic() - t0, len(self._available_cols),
-                   sorted(self._available_cols))
-
-        # Build SELECT clause: required + whichever optional cols exist
-        cols = list(_REQUIRED_COLS)
-        for internal_name, candidates in _OPTIONAL_COL_CANDIDATES.items():
-            for candidate in candidates:
-                # Strip quotes for comparison with SHOW COLUMNS output
-                bare = candidate.strip('"')
-                if bare in self._available_cols:
-                    if candidate != internal_name and bare != internal_name:
-                        cols.append(f'{candidate} AS "{internal_name}"')
-                    else:
-                        cols.append(candidate)
-                    break
-        self._select_sql = f"SELECT {', '.join(cols)} FROM system.runtime.queries"
-
-    def _get_select_sql(self) -> str:
-        if self._select_sql is None:
-            self._discover_columns()
-        return self._select_sql
-
-    def _query_to_dicts(self, cursor, rows) -> list[dict]:
-        columns = [desc[0] for desc in cursor.description]
-        return [dict(zip(columns, row)) for row in rows]
-
-    def list_queries(self, state: Optional[str] = None, limit: int = 0, query_user: Optional[str] = None) -> list[QueryInfo]:
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        sql = self._get_select_sql()
-        params = []
-        conditions = []
-        if state is not None:
-            conditions.append("state = ?")
-            params.append(state)
-        if query_user is not None:
-            conditions.append('"user" = ?')
-            params.append(query_user)
-        if conditions:
-            sql += " WHERE " + " AND ".join(conditions)
-        sql += " ORDER BY created DESC"
-        if limit > 0:
-            sql += f" LIMIT {int(limit)}"
-
-        t0 = time.monotonic()
-        cursor.execute(sql, params if params else None)
-        rows = cursor.fetchall()
-        t_fetch = time.monotonic()
-        dicts = self._query_to_dicts(cursor, rows)
-        result = [QueryInfo.from_system_row(row) for row in dicts]
-        t_parse = time.monotonic()
-        _log.debug("SQL list_queries: fetch=%.3fs parse(%d rows)=%.3fs total=%.3fs",
-                   t_fetch - t0, len(result), t_parse - t_fetch, t_parse - t0)
-        return result
-
-    def get_query(self, query_id: str) -> Optional[QueryInfo]:
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        sql = self._get_select_sql() + " WHERE query_id = ?"
-        cursor.execute(sql, [query_id])
-        rows = cursor.fetchall()
-        if not rows:
-            return None
-        dicts = self._query_to_dicts(cursor, rows)
-        return QueryInfo.from_system_row(dicts[0])
-
-    def close(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
 
 
 class HttpQueryBackend:

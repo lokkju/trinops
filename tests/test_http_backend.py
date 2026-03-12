@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from trinops.backend import HttpQueryBackend, QueryBackend, EndpointState
+from trinops.backend import HttpQueryBackend, EndpointState
 from trinops.client import TrinopsClient
 from trinops.config import ConnectionProfile
 from trinops.models import QueryState
@@ -466,9 +466,3 @@ def test_client_kill_query():
         server.shutdown()
 
 
-def test_client_kill_query_sql_backend_raises():
-    from trinops.backend import SqlQueryBackend
-    profile = ConnectionProfile(server="localhost:8080", scheme="http", auth="none", user="dev")
-    client = TrinopsClient(backend=SqlQueryBackend(profile), profile=profile)
-    with pytest.raises(NotImplementedError):
-        client.kill_query("some_id")

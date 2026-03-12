@@ -53,19 +53,3 @@ def test_client_from_profile():
     assert isinstance(client._backend, HttpQueryBackend)
 
 
-def test_client_from_profile_http():
-    from trinops.config import ConnectionProfile
-    from trinops.backend import HttpQueryBackend
-
-    profile = ConnectionProfile(server="localhost:8080", auth="none", user="dev")
-    client = TrinopsClient.from_profile(profile, backend="http")
-    assert isinstance(client._backend, HttpQueryBackend)
-
-
-def test_client_from_profile_sql():
-    from trinops.config import ConnectionProfile
-    from trinops.backend import SqlQueryBackend
-
-    profile = ConnectionProfile(server="localhost:8080", auth="none", user="dev")
-    client = TrinopsClient.from_profile(profile, backend="sql")
-    assert isinstance(client._backend, SqlQueryBackend)

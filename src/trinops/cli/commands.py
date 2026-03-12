@@ -85,11 +85,10 @@ def _build_client(
     profile: Optional[str] = None,
     user: Optional[str] = None,
     auth: Optional[str] = None,
-    backend: str = "http",
     check: bool = False,
 ) -> TrinopsClient:
     cp = _build_profile(server=server, profile=profile, user=user, auth=auth)
-    client = TrinopsClient.from_profile(cp, backend=backend)
+    client = TrinopsClient.from_profile(cp)
     if check:
         with _status("Connecting to Trino..."):
             try:
@@ -139,11 +138,10 @@ def queries(
     page: int = typer.Option(1, "--page", "-p", help="Page number (1-based)"),
     json: bool = typer.Option(False, "--json", help="JSON output"),
     select: Optional[str] = typer.Option(None, "--select", "-s", help="Comma-separated fields for JSON (e.g. query_id,state,user)"),
-    backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """List running and recent queries."""
     cp = _build_profile(server=server, profile=profile, user=user, auth=auth)
-    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend)
+    client = _build_client(server=server, profile=profile, user=user, auth=auth)
     effective_user = None if query_user == "all" else (query_user or cp.user)
     try:
         with _status("Loading..."):
@@ -180,10 +178,9 @@ def query(
     auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
     json: bool = typer.Option(False, "--json", help="JSON output"),
     select: Optional[str] = typer.Option(None, "--select", "-s", help="Comma-separated fields to include in JSON (e.g. queryId,state,queryStats.elapsedTime)"),
-    backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """Show details for a specific query."""
-    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend)
+    client = _build_client(server=server, profile=profile, user=user, auth=auth)
     try:
         with _status("Loading..."):
             if json or select:
@@ -224,7 +221,7 @@ def kill(
         typer.echo("Kill is disabled (allow_kill = false in config)", err=True)
         raise typer.Exit(1)
 
-    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend="http")
+    client = _build_client(server=server, profile=profile, user=user, auth=auth)
 
     try:
         if cp.confirm_kill and not yes:
@@ -249,9 +246,6 @@ def kill(
         raise
     except typer.Abort:
         raise
-    except NotImplementedError as e:
-        typer.echo(str(e), err=True)
-        raise typer.Exit(1)
     except Exception as e:
         typer.echo(f"Failed to kill query: {e}", err=True)
         raise typer.Exit(1)
@@ -264,13 +258,12 @@ def tui(
     user: Optional[str] = typer.Option(None, help="Trino user"),
     auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
     interval: float = typer.Option(30.0, help="Refresh interval in seconds"),
-    backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """Launch interactive TUI dashboard."""
     from trinops.tui.app import TrinopsApp
 
     cp = _build_profile(server=server, profile=profile, user=user, auth=auth)
-    client = _build_client(server=server, profile=profile, user=user, auth=auth, backend=backend, check=True)
+    client = _build_client(server=server, profile=profile, user=user, auth=auth, check=True)
     client.close()
     tui_app = TrinopsApp(profile=cp, interval=interval)
     tui_app.run()
@@ -283,10 +276,9 @@ def top(
     user: Optional[str] = typer.Option(None, help="Trino user"),
     auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
     interval: float = typer.Option(30.0, help="Refresh interval in seconds"),
-    backend: str = typer.Option("http", help="Backend (http/sql)"),
 ):
     """Launch interactive TUI dashboard (alias for tui)."""
-    tui(server=server, profile=profile, user=user, auth=auth, interval=interval, backend=backend)
+    tui(server=server, profile=profile, user=user, auth=auth, interval=interval)
 
 
 config_app = typer.Typer(name="config", help="Manage trinops configuration")
