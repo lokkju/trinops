@@ -111,9 +111,18 @@ Only the fields listed above are read. Other fields in the response are ignored,
 
 ### TUI changes
 
-Add a `ClusterHeader` widget (a `Static` subclass) between the Textual `Header` and `DataTable` in `compose()`. CSS: `height: 1; background: $panel; color: $text; padding: 0 1;` (matches `StatusBar`).
+Add a `ClusterHeader` widget (a `Static` subclass) between the Textual `Header` and `DataTable` in `compose()`. CSS: `height: auto; background: $panel; color: $text; padding: 0 1;` (matches `StatusBar` styling, but `auto` height so it grows when content wraps).
 
-The `_fetch_queries` worker return type changes from `list[QueryInfo]` to `tuple[list[QueryInfo], ClusterStats]`. The `on_worker_state_changed` handler destructures the tuple, assigning queries to `self._queries` and stats to a new `self._cluster_stats` field. `_update_table` then updates the `ClusterHeader` widget.
+The `ClusterHeader` render method measures the available width (`self.size.width - 2` for padding) and greedily packs segments left-to-right onto lines. When the next segment (plus its ` │ ` separator) would exceed the remaining width, it starts a new line. This keeps the single dense line on wide terminals while wrapping cleanly on narrow ones. Each line is independently pipe-separated.
+
+The TUI runs two independent worker cycles:
+
+1. **Query worker** (`_fetch_queries`) — unchanged, fetches `/v1/query`, updates the DataTable. Interval controlled by existing `+`/`-` keys (default 30s).
+2. **Stats worker** (`_fetch_stats`) — new, calls `TrinopsClient.build_cluster_stats()` which hits `/v1/info` and `/v1/cluster` (both lightweight), then aggregates counts from `self._queries` (already in memory). Updates `ClusterHeader`. Runs on its own timer, default same as query interval but independently adjustable in the future.
+
+The stats worker reads `self._queries` for aggregation rather than re-fetching the query list, so it adds no load to Trino beyond the two small info endpoints. When the query worker refreshes `self._queries`, the next stats tick picks up the new counts automatically.
+
+`build_cluster_stats` signature changes to accept the query list as a parameter so it remains a pure aggregation on the client side: `build_cluster_stats(queries: list[QueryInfo]) -> ClusterStats`.
 
 ## Formatting
 
