@@ -355,6 +355,14 @@ def config_set(
     field_type = {f.name: f.type for f in dc_fields(ConnectionProfile)}[key]
     if field_type == "int":
         typed_value: object = int(value)
+    elif field_type == "bool":
+        if value.lower() in ("true", "1"):
+            typed_value = True
+        elif value.lower() in ("false", "0"):
+            typed_value = False
+        else:
+            typer.echo(f"Invalid bool value: {value!r} (use true/false)", err=True)
+            raise typer.Exit(1)
     else:
         typed_value = value
 

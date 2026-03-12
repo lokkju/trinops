@@ -159,3 +159,32 @@ def test_save_config_updates_existing_profile(tmp_path):
     staging = config.get_profile("staging")
     assert staging.auth == "jwt"
     assert staging.server == "trino-staging.example.com:8080"  # preserved
+
+
+def test_allow_kill_defaults_true():
+    profile = ConnectionProfile()
+    assert profile.allow_kill is True
+    assert profile.confirm_kill is True
+
+
+def test_allow_kill_from_config():
+    config_toml = """\
+[default]
+server = "trino:8080"
+allow_kill = false
+confirm_kill = false
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+        f.write(config_toml)
+        f.flush()
+        config = load_config(f.name)
+    os.unlink(f.name)
+    assert config.default.allow_kill is False
+    assert config.default.confirm_kill is False
+
+
+def test_save_config_bool_field(tmp_path):
+    path = tmp_path / "config.toml"
+    save_config(path, "default", {"server": "trino:8080", "allow_kill": False})
+    config = load_config(path)
+    assert config.default.allow_kill is False

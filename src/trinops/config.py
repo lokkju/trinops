@@ -25,6 +25,8 @@ class ConnectionProfile:
     password_cmd: Optional[str] = None
     jwt_token: Optional[str] = None
     query_limit: int = 50
+    allow_kill: bool = True
+    confirm_kill: bool = True
 
     @classmethod
     def from_dict(cls, data: dict) -> ConnectionProfile:
