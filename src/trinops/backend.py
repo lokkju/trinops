@@ -202,7 +202,14 @@ class HttpQueryBackend:
             headers["Authorization"] = f"Bearer {token}"
         elif method in ("oauth2", "kerberos"):
             import requests as req
+            from urllib3.util.retry import Retry
+            from requests.adapters import HTTPAdapter
             self._session = req.Session()
+            retries = Retry(total=3, backoff_factor=0.5,
+                            status_forcelist=[502, 503, 504])
+            adapter = HTTPAdapter(max_retries=retries)
+            self._session.mount("http://", adapter)
+            self._session.mount("https://", adapter)
             self._session.headers.update(headers)
             trino_auth = build_auth(profile)
             trino_auth.set_http_session(self._session)
@@ -225,17 +232,14 @@ class HttpQueryBackend:
         url = f"{self._base_url}{path}"
         t0 = time.monotonic()
         if self._session is not None:
-            # Stream to measure wire bytes before requests decompresses
-            response = self._session.get(url, timeout=30, stream=True)
+            response = self._session.get(url, timeout=30)
             response.raise_for_status()
-            wire = response.raw.read()
+            wire = len(response.content)
             t_net = time.monotonic()
-            encoding = response.headers.get("Content-Encoding", "")
-            raw = gzip.decompress(wire) if encoding == "gzip" else wire
-            data = _json.loads(raw)
+            data = _json.loads(response.content)
             t_parse = time.monotonic()
-            _log.debug("GET %s: network=%.3fs json_parse=%.3fs wire=%d bytes body=%d bytes encoding=%s",
-                       path, t_net - t0, t_parse - t_net, len(wire), len(raw), encoding or "identity")
+            _log.debug("GET %s: network=%.3fs json_parse=%.3fs wire=%d bytes",
+                       path, t_net - t0, t_parse - t_net, wire)
             return data
         request = Request(url, headers=self._headers)
         with urlopen(request, timeout=30) as response:
