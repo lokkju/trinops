@@ -247,38 +247,35 @@ def _scrub_request(request):
 def _exercise_endpoints(base_url: str, query_ids: list[str]) -> tuple[str, str]:
     """Hit every endpoint the backend uses, in the order tests expect.
     Returns (detail_query_id, kill_query_id) so the caller can write metadata."""
+    hdrs = {"Accept": "application/json", "X-Trino-User": "trinops-recorder"}
+
     # GET /v1/query (list all)
-    req = Request(f"{base_url}/v1/query",
-                  headers={"Accept": "application/json"})
+    req = Request(f"{base_url}/v1/query", headers=hdrs)
     with urlopen(req, timeout=30) as resp:
         queries = json.loads(resp.read())
     print(f"    GET /v1/query: {len(queries)} queries")
 
     # GET /v1/query?state=RUNNING
-    req = Request(f"{base_url}/v1/query?state=RUNNING",
-                  headers={"Accept": "application/json"})
+    req = Request(f"{base_url}/v1/query?state=RUNNING", headers=hdrs)
     with urlopen(req, timeout=30) as resp:
         running = json.loads(resp.read())
     print(f"    GET /v1/query?state=RUNNING: {len(running)} queries")
 
     # GET /v1/query/{id} (detail for first query)
     detail_id = query_ids[0]
-    req = Request(f"{base_url}/v1/query/{detail_id}",
-                  headers={"Accept": "application/json"})
+    req = Request(f"{base_url}/v1/query/{detail_id}", headers=hdrs)
     with urlopen(req, timeout=30) as resp:
         detail = json.loads(resp.read())
     print(f"    GET /v1/query/{detail_id}: state={detail.get('state')}")
 
     # GET /v1/info
-    req = Request(f"{base_url}/v1/info",
-                  headers={"Accept": "application/json"})
+    req = Request(f"{base_url}/v1/info", headers=hdrs)
     with urlopen(req, timeout=30) as resp:
         info = json.loads(resp.read())
     print(f"    GET /v1/info: version={info.get('nodeVersion', {}).get('version', '?')}")
 
     # GET /v1/cluster
-    req = Request(f"{base_url}/v1/cluster",
-                  headers={"Accept": "application/json"})
+    req = Request(f"{base_url}/v1/cluster", headers=hdrs)
     try:
         with urlopen(req, timeout=30) as resp:
             cluster = json.loads(resp.read())
@@ -288,9 +285,7 @@ def _exercise_endpoints(base_url: str, query_ids: list[str]) -> tuple[str, str]:
 
     # DELETE /v1/query/{id} (kill last query if still running)
     kill_id = query_ids[-1]
-    req = Request(f"{base_url}/v1/query/{kill_id}",
-                  method="DELETE",
-                  headers={"Accept": "application/json"})
+    req = Request(f"{base_url}/v1/query/{kill_id}", method="DELETE", headers=hdrs)
     try:
         with urlopen(req, timeout=30) as resp:
             print(f"    DELETE /v1/query/{kill_id}: {resp.status}")
