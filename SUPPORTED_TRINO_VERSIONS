@@ -1,0 +1,10 @@
+# Trino versions to record VCR cassettes for.
+# One Docker image tag per line. Comments and blank lines are ignored.
+# Re-record after changes: make record-all
+
+# Oldest supported
+400
+# Mid-range
+430
+# Current
+449
