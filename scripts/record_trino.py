@@ -207,7 +207,9 @@ def record_version(version: str) -> None:
 
         # Now record the API interactions we care about
         print("  Recording API responses...")
-        cassette_dir.mkdir(parents=True, exist_ok=True)
+        if cassette_dir.exists():
+            shutil.rmtree(cassette_dir)
+        cassette_dir.mkdir(parents=True)
         cassette_path = str(cassette_dir / "responses.yaml")
 
         my_vcr = vcr.VCR(
