@@ -31,7 +31,7 @@ Lifecycle for a single version:
 
 1. Pull `trinodb/trino:{version}` if not already present
 2. Start a container with the `tpch` connector enabled (mount a minimal `tpch.properties` catalog file)
-3. Wait for readiness by polling `GET /v1/info` until `starting` is `false` (timeout after 60s)
+3. Wait for readiness by polling `GET /v1/info` until `starting` is `false` (timeout after 120s to accommodate slow image pulls)
 4. Run workload: submit TPC-H queries against `tpch.sf1` via direct HTTP `POST /v1/statement`. Use a mix of fast queries (Q1, Q6) and slower ones (Q5, Q9) to produce queries in RUNNING, QUEUED, and FINISHED states on a single-node instance.
 5. Exercise every endpoint through vcrpy recording:
    - `GET /v1/query` (unfiltered)
@@ -40,7 +40,7 @@ Lifecycle for a single version:
    - `GET /v1/info`
    - `GET /v1/cluster`
    - `DELETE /v1/query/{id}` on one running query
-6. Save cassette to `tests/cassettes/trino-{version}/responses.yaml`
+6. Save cassette to `tests/cassettes/trino-{version}/responses.yaml` and write `tests/cassettes/trino-{version}/metadata.json` with `detail_query_id` and `kill_query_id` (the query IDs used for `GET /v1/query/{id}` and `DELETE /v1/query/{id}` respectively) so tests can reference the exact recorded IDs
 7. Stop and remove the container
 
 The `--all` flag reads `SUPPORTED_TRINO_VERSIONS` and records each version sequentially. If a cassette directory already exists for a version, it is overwritten (idempotent re-recording).
@@ -84,23 +84,24 @@ Configured in `tests/conftest.py`. Uses raw `vcrpy` directly (no `pytest-recordi
 - **Record mode**: `none` by default (pure replay in tests). The recording script uses `all` mode.
 - **Request matching**: match on `method`, `host`, `port`, `path`. Ignore query string parameters (the `?state=` filter on `/v1/query` doesn't affect response shape for testing purposes) and headers.
 - **Response filtering**: strip `Authorization` headers from recorded requests.
+- **Compression**: `decode_compressed_response=True` in both recording and replay configs. The backend sends `Accept-Encoding: gzip`; this setting decodes compressed bodies and strips `Content-Encoding` headers in cassettes, preventing double-decompression during replay.
 - **Interception**: vcrpy patches at the `http.client.HTTPConnection` / `HTTPSConnection` level, which underlies both `urllib.request.urlopen` (the backend's default code path) and `requests.Session` (the OAuth2/Kerberos path). Both paths are intercepted without additional configuration.
 
 ### Test fixture: `conftest.py`
 
-A `trino_version` fixture discovers all `tests/cassettes/trino-*/` directories, extracts the version string, and parameterizes tests across them. Each test gets vcrpy configured to replay from that version's cassette.
+A `trino_version` fixture discovers all `tests/cassettes/trino-*/` directories, extracts the version string, and parameterizes tests across them. Each test gets vcrpy configured to replay from that version's cassette, plus a `metadata` dict loaded from the version's `metadata.json` sidecar.
 
-Tests that need version-specific cassettes use the `trino_version` fixture, which provides both the version string and configures vcrpy to use the correct cassette directory. Tests that don't need cassettes (existing unit tests, fake server tests) are unaffected.
+The fixture yields a 3-tuple: `(version_str, use_cassette_fn, metadata_dict)`. Tests that need version-specific cassettes use the `trino_version` fixture. Tests that don't need cassettes (existing unit tests, fake server tests) are unaffected.
 
 ### Test file: `tests/test_version_compat.py`
 
 Parameterized tests that exercise `HttpQueryBackend` and `TrinopsClient` against recorded responses:
 
 - `test_list_queries` — `HttpQueryBackend.list_queries()` returns a non-empty list of `QueryInfo` objects with valid `query_id`, `state`, `user`, `created` fields
-- `test_get_query` — calls `list_queries()` first to discover a valid query ID from the cassette, then calls `get_query(id)`. Returns a `QueryInfo` with populated detail fields (elapsed time, memory, rows). The cassette is recorded with `/v1/query` before `/v1/query/{id}` to match this call order.
+- `test_get_query` — reads `detail_query_id` from the metadata sidecar, then calls `get_query(id)`. Returns a `QueryInfo` with populated detail fields (elapsed time, memory, rows).
 - `test_get_info` — `HttpQueryBackend.get_info()` returns a dict with `nodeVersion.version` (string) and `uptime` (string), or `None` on versions where the endpoint 404s
 - `test_get_cluster` — `HttpQueryBackend.get_cluster()` returns a dict with `activeWorkers`, or `None` on versions where the endpoint 404s
-- `test_kill_query` — calls `list_queries()` first to discover a valid query ID, then calls `kill_query(id)`. Returns `True` (cassette contains the DELETE response with 204 status). Cassette ordering: `/v1/query` before `DELETE /v1/query/{id}`.
+- `test_kill_query` — reads `kill_query_id` from the metadata sidecar, then calls `kill_query(id)`. Returns `True` (cassette contains the DELETE response with 204 status).
 - `test_build_cluster_stats` — `TrinopsClient.build_cluster_stats()` populates `ClusterStats` fields from recorded data; `trino_version` is present, `active_workers` is present or `None` depending on version
 
 Each test runs once per recorded version. Failures identify the exact version that broke.
