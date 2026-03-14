@@ -28,33 +28,37 @@ TPCH_PROPERTIES = Path(__file__).resolve().parent / "tpch.properties"
 CONTAINER_NAME_PREFIX = "trinops-vcr-"
 TRINO_PORT = 8080
 
-# TPC-H queries: mix of fast and slow to capture various states
+# TPC-H queries adapted for Trino's tpch connector (no table-prefix on column names).
+# Mix of fast and slow to capture various query states.
 TPCH_QUERIES = [
     # Q6 - fast, single table scan
-    """SELECT sum(l_extendedprice * l_discount) AS revenue
+    """SELECT sum(extendedprice * discount) AS revenue
        FROM tpch.sf1.lineitem
-       WHERE l_shipdate >= DATE '1994-01-01'
-         AND l_shipdate < DATE '1995-01-01'
-         AND l_discount BETWEEN 0.05 AND 0.07
-         AND l_quantity < 24""",
+       WHERE shipdate >= DATE '1994-01-01'
+         AND shipdate < DATE '1995-01-01'
+         AND discount BETWEEN 0.05 AND 0.07
+         AND quantity < 24""",
     # Q1 - moderate, aggregation
-    """SELECT l_returnflag, l_linestatus,
-              sum(l_quantity) AS sum_qty,
-              sum(l_extendedprice) AS sum_base_price
+    """SELECT returnflag, linestatus,
+              sum(quantity) AS sum_qty,
+              sum(extendedprice) AS sum_base_price
        FROM tpch.sf1.lineitem
-       WHERE l_shipdate <= DATE '1998-09-02'
-       GROUP BY l_returnflag, l_linestatus
-       ORDER BY l_returnflag, l_linestatus""",
+       WHERE shipdate <= DATE '1998-09-02'
+       GROUP BY returnflag, linestatus
+       ORDER BY returnflag, linestatus""",
     # Q5 - slower, multi-join
-    """SELECT n_name, sum(l_extendedprice * (1 - l_discount)) AS revenue
-       FROM tpch.sf1.customer, tpch.sf1.orders, tpch.sf1.lineitem,
-            tpch.sf1.supplier, tpch.sf1.nation, tpch.sf1.region
-       WHERE c_custkey = o_custkey AND l_orderkey = o_orderkey
-         AND l_suppkey = s_suppkey AND c_nationkey = s_nationkey
-         AND s_nationkey = n_nationkey AND n_regionkey = r_regionkey
-         AND r_name = 'ASIA' AND o_orderdate >= DATE '1994-01-01'
-         AND o_orderdate < DATE '1995-01-01'
-       GROUP BY n_name ORDER BY revenue DESC""",
+    """SELECT n.name AS nation_name,
+              sum(l.extendedprice * (1 - l.discount)) AS revenue
+       FROM tpch.sf1.customer c
+       JOIN tpch.sf1.orders o ON c.custkey = o.custkey
+       JOIN tpch.sf1.lineitem l ON o.orderkey = l.orderkey
+       JOIN tpch.sf1.supplier s ON l.suppkey = s.suppkey AND c.nationkey = s.nationkey
+       JOIN tpch.sf1.nation n ON s.nationkey = n.nationkey
+       JOIN tpch.sf1.region r ON n.regionkey = r.regionkey
+       WHERE r.name = 'ASIA'
+         AND o.orderdate >= DATE '1994-01-01'
+         AND o.orderdate < DATE '1995-01-01'
+       GROUP BY n.name ORDER BY revenue DESC""",
 ]
 
 
