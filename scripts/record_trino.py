@@ -113,36 +113,39 @@ def wait_for_trino(base_url: str, timeout: float = 120) -> None:
     raise TimeoutError(f"Trino did not become ready within {timeout}s")
 
 
-def submit_query(base_url: str, sql: str) -> str:
-    """Submit a query via POST /v1/statement, return query ID."""
+TRINO_HEADERS = {
+    "X-Trino-User": "trinops-recorder",
+    "X-Trino-Source": "trinops-vcr",
+    "Accept": "application/json",
+}
+
+
+def submit_query(base_url: str, sql: str) -> tuple[str, str | None]:
+    """Submit a query via POST /v1/statement, return (query_id, next_uri)."""
     req = Request(
         f"{base_url}/v1/statement",
         data=sql.encode(),
-        headers={
-            "X-Trino-User": "trinops-recorder",
-            "X-Trino-Source": "trinops-vcr",
-            "Content-Type": "text/plain",
-        },
+        headers={**TRINO_HEADERS, "Content-Type": "text/plain"},
         method="POST",
     )
     with urlopen(req, timeout=30) as resp:
         data = json.loads(resp.read())
-    return data["id"]
+    return data["id"], data.get("nextUri")
 
 
-def poll_query_until_state(base_url: str, query_id: str,
-                           target_states: set[str],
-                           timeout: float = 60) -> str:
-    """Poll a query until it reaches one of the target states. Returns final state."""
+def follow_next_uri(next_uri: str | None, timeout: float = 120) -> str:
+    """Follow the nextUri chain until the query reaches a terminal state.
+    Returns the final state. Trino requires clients to poll nextUri to
+    drive query execution forward; without this, queries are abandoned."""
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
+    while next_uri and time.monotonic() < deadline:
         try:
-            req = Request(f"{base_url}/v1/query/{query_id}",
-                          headers={"Accept": "application/json"})
+            req = Request(next_uri, headers=TRINO_HEADERS)
             with urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read())
-            state = data.get("state", "UNKNOWN")
-            if state in target_states:
+            next_uri = data.get("nextUri")
+            state = data.get("stats", {}).get("state", "")
+            if state in ("FINISHED", "FAILED"):
                 return state
         except (URLError, ConnectionError, OSError):
             pass
@@ -150,26 +153,21 @@ def poll_query_until_state(base_url: str, query_id: str,
     return "TIMEOUT"
 
 
-def drain_query(base_url: str, query_id: str) -> None:
-    """Follow nextUri chain to drain a query's results."""
-    # Get initial nextUri from query detail
-    try:
-        req = Request(f"{base_url}/v1/query/{query_id}",
-                      headers={"Accept": "application/json"})
-        with urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-        state = data.get("state", "")
-        if state in ("FINISHED", "FAILED"):
-            return
-    except (URLError, ConnectionError, OSError):
-        return
-
-    # Poll until terminal
-    poll_query_until_state(
-        base_url, query_id,
-        {"FINISHED", "FAILED"},
-        timeout=120,
-    )
+def activate_query(next_uri: str | None) -> str | None:
+    """Follow nextUri a few times to activate the query without draining it.
+    Returns the latest nextUri for continued polling if desired."""
+    for _ in range(3):
+        if not next_uri:
+            break
+        try:
+            req = Request(next_uri, headers=TRINO_HEADERS)
+            with urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read())
+            next_uri = data.get("nextUri")
+        except (URLError, ConnectionError, OSError):
+            break
+        time.sleep(0.3)
+    return next_uri
 
 
 def record_version(version: str) -> None:
@@ -193,17 +191,24 @@ def record_version(version: str) -> None:
         wait_for_trino(base_url)
 
         # Submit workload (outside VCR recording)
+        # Trino requires clients to follow the nextUri chain to drive
+        # query execution. Without polling, queries are abandoned.
         print("  Submitting TPC-H workload...")
         query_ids = []
+        next_uris = []
         for i, sql in enumerate(TPCH_QUERIES):
-            qid = submit_query(base_url, sql)
+            qid, next_uri = submit_query(base_url, sql)
             query_ids.append(qid)
+            next_uris.append(next_uri)
             print(f"    Query {i+1}/{len(TPCH_QUERIES)}: {qid}")
 
-        # Wait for at least one query to finish
-        time.sleep(2)
-        for qid in query_ids[:-1]:
-            drain_query(base_url, qid)
+        # Drain all but the last query to completion
+        for i, next_uri in enumerate(next_uris[:-1]):
+            state = follow_next_uri(next_uri)
+            print(f"    Query {i+1} finished: {state}")
+
+        # Activate the last query (don't drain — we'll kill it during recording)
+        activate_query(next_uris[-1])
 
         # Now record the API interactions we care about
         print("  Recording API responses...")

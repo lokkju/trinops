@@ -2,8 +2,8 @@
 # One Docker image tag per line. Comments and blank lines are ignored.
 # Re-record after changes: make record-all
 
-# Oldest supported
-400
+# Oldest supported (400 has cgroup v2 JDK incompatibility)
+410
 # Mid-range
 430
 # Current
