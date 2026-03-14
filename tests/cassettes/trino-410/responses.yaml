@@ -1,0 +1,232 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Connection:
+      - close
+      Host:
+      - 127.0.0.1:8080
+      User-Agent:
+      - Python-urllib/3.10
+      X-Trino-User:
+      - trinops-recorder
+    method: GET
+    uri: http://127.0.0.1:8080/v1/query
+  response:
+    body:
+      string: '[{"queryId":"20260314_005530_00001_gbzmi","session":{"queryId":"20260314_005530_00001_gbzmi","transactionId":"19619d6e-9e6d-4c1b-939b-d81615d868dd","clientTransactionSupport":false,"user":"trinops-recorder","groups":[],"principal":"trinops-recorder","enabledRoles":[],"source":"trinops-vcr","path":{},"timeZoneKey":0,"locale":"en_US","remoteUserAddress":"172.17.0.1","userAgent":"Python-urllib/3.10","clientTags":[],"clientCapabilities":[],"resourceEstimates":{},"start":"2026-03-14T00:55:30.721180630Z","systemProperties":{},"catalogProperties":{},"catalogRoles":{},"preparedStatements":{},"protocolName":"Trino","timeZone":"UTC"},"resourceGroupId":["global"],"state":"FAILED","scheduled":false,"self":"http://172.17.0.2:8080/v1/query/20260314_005530_00001_gbzmi","query":"SELECT
+        l_returnflag, l_linestatus,\n              sum(l_quantity) AS sum_qty,\n              sum(l_extendedprice)
+        AS sum_base_price\n       FROM tpch.sf1.lineitem\n       WHERE l_shipdate
+        \u003C= DATE \u00271998-09-02\u0027\n       GROUP BY l_returnflag, l_linestatus\n       ORDER
+        BY l_returnflag, l_linestatus","queryStats":{"createTime":"2026-03-14T00:55:30.727Z","endTime":"2026-03-14T00:55:30.730Z","queuedTime":"304.54us","elapsedTime":"3.99ms","executionTime":"0.00ns","failedTasks":0,"totalDrivers":0,"queuedDrivers":0,"runningDrivers":0,"completedDrivers":0,"rawInputDataSize":"0B","rawInputPositions":0,"physicalInputDataSize":"0B","cumulativeUserMemory":0.0,"failedCumulativeUserMemory":0.0,"userMemoryReservation":"0B","totalMemoryReservation":"0B","peakUserMemoryReservation":"0B","peakTotalMemoryReservation":"0B","totalCpuTime":"0.00ms","failedCpuTime":"0.00ms","totalScheduledTime":"0.00ms","failedScheduledTime":"0.00ms","fullyBlocked":false,"blockedReasons":[]},"errorType":"USER_ERROR","errorCode":{"code":47,"name":"COLUMN_NOT_FOUND","type":"USER_ERROR"},"queryType":"SELECT","retryPolicy":"NONE"},{"queryId":"20260314_005530_00002_gbzmi","session":{"queryId":"20260314_005530_00002_gbzmi","transactionId":"ffa9c643-2835-405c-b892-3f43c237836f","clientTransactionSupport":false,"user":"trinops-recorder","groups":[],"principal":"trinops-recorder","enabledRoles":[],"source":"trinops-vcr","path":{},"timeZoneKey":0,"locale":"en_US","remoteUserAddress":"172.17.0.1","userAgent":"Python-urllib/3.10","clientTags":[],"clientCapabilities":[],"resourceEstimates":{},"start":"2026-03-14T00:55:31.240423482Z","systemProperties":{},"catalogProperties":{},"catalogRoles":{},"preparedStatements":{},"protocolName":"Trino","timeZone":"UTC"},"resourceGroupId":["global"],"state":"FAILED","scheduled":false,"self":"http://172.17.0.2:8080/v1/query/20260314_005530_00002_gbzmi","query":"SELECT
+        n_name, sum(l_extendedprice * (1 - l_discount)) AS revenue\n       FROM tpch.sf1.customer,
+        tpch.sf1.orders, tpch.sf1.lineitem,\n            tpch.sf1.supplier, tpch.sf1.nation,
+        tpch.sf1.region\n       WHERE c_custkey = o_custkey AND l_orderkey = o_orderkey\n         AND
+        l_suppkey = s_suppkey AND c_nationkey = s_nationkey\n         AND s_nationkey
+        = n_nationkey AND n_regionkey = r_regionkey\n         AND r_name = \u0027ASIA\u0027
+        AND o_orderdate \u003E= DATE \u00271994-01-01\u0027\n         AND o_orderdate
+        \u003C DATE \u00271995-01-01\u0027\n       GROUP BY n_name ORDER BY revenue
+        DESC","queryStats":{"createTime":"2026-03-14T00:55:31.249Z","endTime":"2026-03-14T00:55:31.254Z","queuedTime":"297.77us","elapsedTime":"5.29ms","executionTime":"0.00ns","failedTasks":0,"totalDrivers":0,"queuedDrivers":0,"runningDrivers":0,"completedDrivers":0,"rawInputDataSize":"0B","rawInputPositions":0,"physicalInputDataSize":"0B","cumulativeUserMemory":0.0,"failedCumulativeUserMemory":0.0,"userMemoryReservation":"0B","totalMemoryReservation":"0B","peakUserMemoryReservation":"0B","peakTotalMemoryReservation":"0B","totalCpuTime":"0.00ms","failedCpuTime":"0.00ms","totalScheduledTime":"0.00ms","failedScheduledTime":"0.00ms","fullyBlocked":false,"blockedReasons":[]},"errorType":"USER_ERROR","errorCode":{"code":47,"name":"COLUMN_NOT_FOUND","type":"USER_ERROR"},"queryType":"SELECT","retryPolicy":"NONE"},{"queryId":"20260314_005530_00000_gbzmi","session":{"queryId":"20260314_005530_00000_gbzmi","transactionId":"af11d75a-6112-43ef-8a96-9c604e24b40c","clientTransactionSupport":false,"user":"trinops-recorder","groups":[],"principal":"trinops-recorder","enabledRoles":[],"source":"trinops-vcr","path":{},"timeZoneKey":0,"locale":"en_US","remoteUserAddress":"172.17.0.1","userAgent":"Python-urllib/3.10","clientTags":[],"clientCapabilities":[],"resourceEstimates":{},"start":"2026-03-14T00:55:30.159752786Z","systemProperties":{},"catalogProperties":{},"catalogRoles":{},"preparedStatements":{},"protocolName":"Trino","timeZone":"UTC"},"resourceGroupId":["global"],"state":"FAILED","scheduled":false,"self":"http://172.17.0.2:8080/v1/query/20260314_005530_00000_gbzmi","query":"SELECT
+        sum(l_extendedprice * l_discount) AS revenue\n       FROM tpch.sf1.lineitem\n       WHERE
+        l_shipdate \u003E= DATE \u00271994-01-01\u0027\n         AND l_shipdate \u003C
+        DATE \u00271995-01-01\u0027\n         AND l_discount BETWEEN 0.05 AND 0.07\n         AND
+        l_quantity \u003C 24","queryStats":{"createTime":"2026-03-14T00:55:30.190Z","endTime":"2026-03-14T00:55:30.373Z","queuedTime":"9.59ms","elapsedTime":"183.06ms","executionTime":"0.00ns","failedTasks":0,"totalDrivers":0,"queuedDrivers":0,"runningDrivers":0,"completedDrivers":0,"rawInputDataSize":"0B","rawInputPositions":0,"physicalInputDataSize":"0B","cumulativeUserMemory":0.0,"failedCumulativeUserMemory":0.0,"userMemoryReservation":"0B","totalMemoryReservation":"0B","peakUserMemoryReservation":"0B","peakTotalMemoryReservation":"0B","totalCpuTime":"0.00ms","failedCpuTime":"0.00ms","totalScheduledTime":"0.00ms","failedScheduledTime":"0.00ms","fullyBlocked":false,"blockedReasons":[]},"errorType":"USER_ERROR","errorCode":{"code":47,"name":"COLUMN_NOT_FOUND","type":"USER_ERROR"},"queryType":"SELECT","retryPolicy":"NONE"}]
+
+        '
+    headers:
+      Connection:
+      - close
+      Content-Length:
+      - '5935'
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 14 Mar 2026 00:55:31 GMT
+      Vary:
+      - Accept-Encoding
+      X-Content-Type-Options:
+      - nosniff
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Connection:
+      - close
+      Host:
+      - 127.0.0.1:8080
+      User-Agent:
+      - Python-urllib/3.10
+      X-Trino-User:
+      - trinops-recorder
+    method: GET
+    uri: http://127.0.0.1:8080/v1/query?state=RUNNING
+  response:
+    body:
+      string: '[]
+
+        '
+    headers:
+      Connection:
+      - close
+      Content-Length:
+      - '3'
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 14 Mar 2026 00:55:31 GMT
+      Vary:
+      - Accept-Encoding
+      X-Content-Type-Options:
+      - nosniff
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Connection:
+      - close
+      Host:
+      - 127.0.0.1:8080
+      User-Agent:
+      - Python-urllib/3.10
+      X-Trino-User:
+      - trinops-recorder
+    method: GET
+    uri: http://127.0.0.1:8080/v1/query/20260314_005530_00000_gbzmi
+  response:
+    body:
+      string: '{"queryId":"20260314_005530_00000_gbzmi","session":{"queryId":"20260314_005530_00000_gbzmi","transactionId":"af11d75a-6112-43ef-8a96-9c604e24b40c","clientTransactionSupport":false,"user":"trinops-recorder","groups":[],"principal":"trinops-recorder","enabledRoles":[],"source":"trinops-vcr","path":{},"timeZoneKey":0,"locale":"en_US","remoteUserAddress":"172.17.0.1","userAgent":"Python-urllib/3.10","clientTags":[],"clientCapabilities":[],"resourceEstimates":{},"start":"2026-03-14T00:55:30.159752786Z","systemProperties":{},"catalogProperties":{},"catalogRoles":{},"preparedStatements":{},"protocolName":"Trino","timeZone":"UTC"},"state":"FAILED","self":"http://172.17.0.2:8080/v1/query/20260314_005530_00000_gbzmi","fieldNames":[],"query":"SELECT
+        sum(l_extendedprice * l_discount) AS revenue\n       FROM tpch.sf1.lineitem\n       WHERE
+        l_shipdate \u003E= DATE \u00271994-01-01\u0027\n         AND l_shipdate \u003C
+        DATE \u00271995-01-01\u0027\n         AND l_discount BETWEEN 0.05 AND 0.07\n         AND
+        l_quantity \u003C 24","queryStats":{"createTime":"2026-03-14T00:55:30.190Z","executionStartTime":"2026-03-14T00:55:30.373Z","lastHeartbeat":"2026-03-14T00:55:30.710Z","endTime":"2026-03-14T00:55:30.373Z","elapsedTime":"183.06ms","queuedTime":"9.59ms","resourceWaitingTime":"173.47ms","dispatchingTime":"0.00ns","executionTime":"0.00ns","analysisTime":"178.46ms","planningTime":"0.00ns","finishingTime":"0.00ns","totalTasks":0,"runningTasks":0,"completedTasks":0,"failedTasks":0,"totalDrivers":0,"queuedDrivers":0,"runningDrivers":0,"blockedDrivers":0,"completedDrivers":0,"cumulativeUserMemory":0.0,"failedCumulativeUserMemory":0.0,"userMemoryReservation":"0B","revocableMemoryReservation":"0B","totalMemoryReservation":"0B","peakUserMemoryReservation":"0B","peakRevocableMemoryReservation":"0B","peakTotalMemoryReservation":"0B","peakTaskUserMemory":"0B","peakTaskRevocableMemory":"0B","peakTaskTotalMemory":"0B","scheduled":false,"totalScheduledTime":"0.00ns","failedScheduledTime":"0.00ns","totalCpuTime":"0.00ns","failedCpuTime":"0.00ns","totalBlockedTime":"0.00ns","fullyBlocked":false,"blockedReasons":[],"physicalInputDataSize":"0B","failedPhysicalInputDataSize":"0B","physicalInputPositions":0,"failedPhysicalInputPositions":0,"physicalInputReadTime":"0.00ns","failedPhysicalInputReadTime":"0.00ns","internalNetworkInputDataSize":"0B","failedInternalNetworkInputDataSize":"0B","internalNetworkInputPositions":0,"failedInternalNetworkInputPositions":0,"rawInputDataSize":"0B","failedRawInputDataSize":"0B","rawInputPositions":0,"failedRawInputPositions":0,"processedInputDataSize":"0B","failedProcessedInputDataSize":"0B","processedInputPositions":0,"failedProcessedInputPositions":0,"inputBlockedTime":"0.00ns","failedInputBlockedTime":"0.00ns","outputDataSize":"0B","failedOutputDataSize":"0B","outputPositions":0,"failedOutputPositions":0,"outputBlockedTime":"0.00ns","failedOutputBlockedTime":"0.00ns","physicalWrittenDataSize":"0B","failedPhysicalWrittenDataSize":"0B","stageGcStatistics":[],"dynamicFiltersStats":{"dynamicFilterDomainStats":[],"lazyDynamicFilters":0,"replicatedDynamicFilters":0,"totalDynamicFilters":0,"dynamicFiltersCompleted":0},"operatorSummaries":[],"logicalWrittenDataSize":"0B","writtenPositions":0,"spilledDataSize":"0B"},"setSessionProperties":{},"resetSessionProperties":[],"setRoles":{},"addedPreparedStatements":{},"deallocatedPreparedStatements":[],"clearTransactionId":false,"failureInfo":{"type":"io.trino.spi.TrinoException","message":"line
+        3:14: Column \u0027l_shipdate\u0027 cannot be resolved","suppressed":[],"stack":["io.trino.sql.analyzer.SemanticExceptions.semanticException(SemanticExceptions.java:48)","io.trino.sql.analyzer.SemanticExceptions.semanticException(SemanticExceptions.java:43)","io.trino.sql.analyzer.SemanticExceptions.missingAttributeException(SemanticExceptions.java:33)","io.trino.sql.analyzer.Scope.lambda$resolveField$7(Scope.java:228)","java.base/java.util.Optional.orElseThrow(Optional.java:403)","io.trino.sql.analyzer.Scope.resolveField(Scope.java:228)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.visitIdentifier(ExpressionAnalyzer.java:664)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.visitIdentifier(ExpressionAnalyzer.java:581)","io.trino.sql.tree.Identifier.accept(Identifier.java:91)","io.trino.sql.tree.StackableAstVisitor.process(StackableAstVisitor.java:27)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.process(ExpressionAnalyzer.java:604)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.getOperator(ExpressionAnalyzer.java:3103)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.visitComparisonExpression(ExpressionAnalyzer.java:803)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.visitComparisonExpression(ExpressionAnalyzer.java:581)","io.trino.sql.tree.ComparisonExpression.accept(ComparisonExpression.java:137)","io.trino.sql.tree.StackableAstVisitor.process(StackableAstVisitor.java:27)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.process(ExpressionAnalyzer.java:604)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.coerceType(ExpressionAnalyzer.java:3136)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.visitLogicalExpression(ExpressionAnalyzer.java:787)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.visitLogicalExpression(ExpressionAnalyzer.java:581)","io.trino.sql.tree.LogicalExpression.accept(LogicalExpression.java:80)","io.trino.sql.tree.StackableAstVisitor.process(StackableAstVisitor.java:27)","io.trino.sql.analyzer.ExpressionAnalyzer$Visitor.process(ExpressionAnalyzer.java:604)","io.trino.sql.analyzer.ExpressionAnalyzer.analyze(ExpressionAnalyzer.java:485)","io.trino.sql.analyzer.ExpressionAnalyzer.analyzeExpression(ExpressionAnalyzer.java:3438)","io.trino.sql.analyzer.StatementAnalyzer$Visitor.analyzeExpression(StatementAnalyzer.java:4593)","io.trino.sql.analyzer.StatementAnalyzer$Visitor.analyzeWhere(StatementAnalyzer.java:4421)","io.trino.sql.analyzer.StatementAnalyzer$Visitor.lambda$visitQuerySpecification$67(StatementAnalyzer.java:2911)","java.base/java.util.Optional.ifPresent(Optional.java:178)","io.trino.sql.analyzer.StatementAnalyzer$Visitor.visitQuerySpecification(StatementAnalyzer.java:2911)","io.trino.sql.analyzer.StatementAnalyzer$Visitor.visitQuerySpecification(StatementAnalyzer.java:479)","io.trino.sql.tree.QuerySpecification.accept(QuerySpecification.java:155)","io.trino.sql.tree.AstVisitor.process(AstVisitor.java:27)","io.trino.sql.analyzer.StatementAnalyzer$Visitor.process(StatementAnalyzer.java:496)","io.trino.sql.analyzer.StatementAnalyzer$Visitor.process(StatementAnalyzer.java:504)","io.trino.sql.analyzer.StatementAnalyzer$Visitor.visitQuery(StatementAnalyzer.java:1470)","io.trino.sql.analyzer.StatementAnalyzer$Visitor.visitQuery(StatementAnalyzer.java:479)","io.trino.sql.tree.Query.accept(Query.java:107)","io.trino.sql.tree.AstVisitor.process(AstVisitor.java:27)","io.trino.sql.analyzer.StatementAnalyzer$Visitor.process(StatementAnalyzer.java:496)","io.trino.sql.analyzer.StatementAnalyzer.analyze(StatementAnalyzer.java:458)","io.trino.sql.analyzer.Analyzer.analyze(Analyzer.java:79)","io.trino.sql.analyzer.Analyzer.analyze(Analyzer.java:71)","io.trino.execution.SqlQueryExecution.analyze(SqlQueryExecution.java:258)","io.trino.execution.SqlQueryExecution.\u003Cinit\u003E(SqlQueryExecution.java:196)","io.trino.execution.SqlQueryExecution$SqlQueryExecutionFactory.createQueryExecution(SqlQueryExecution.java:818)","io.trino.dispatcher.LocalDispatchQueryFactory.lambda$createDispatchQuery$0(LocalDispatchQueryFactory.java:149)","io.trino.$gen.Trino_410____20260314_005524_2.call(Unknown
+        Source)","com.google.common.util.concurrent.TrustedListenableFutureTask$TrustedFutureInterruptibleTask.runInterruptibly(TrustedListenableFutureTask.java:131)","com.google.common.util.concurrent.InterruptibleTask.run(InterruptibleTask.java:74)","com.google.common.util.concurrent.TrustedListenableFutureTask.run(TrustedListenableFutureTask.java:82)","java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)","java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)","java.base/java.lang.Thread.run(Thread.java:833)"],"errorLocation":{"lineNumber":3,"columnNumber":14},"errorCode":{"code":47,"name":"COLUMN_NOT_FOUND","type":"USER_ERROR"}},"errorCode":{"code":47,"name":"COLUMN_NOT_FOUND","type":"USER_ERROR"},"warnings":[],"inputs":[],"referencedTables":[],"routines":[],"finalQueryInfo":true,"resourceGroupId":["global"],"queryType":"SELECT","retryPolicy":"NONE","pruned":false,"version":{"version":"410"},"errorType":"USER_ERROR","scheduled":false}
+
+        '
+    headers:
+      Connection:
+      - close
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 14 Mar 2026 00:55:31 GMT
+      Vary:
+      - Accept-Encoding
+      X-Content-Type-Options:
+      - nosniff
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Connection:
+      - close
+      Host:
+      - 127.0.0.1:8080
+      User-Agent:
+      - Python-urllib/3.10
+      X-Trino-User:
+      - trinops-recorder
+    method: GET
+    uri: http://127.0.0.1:8080/v1/info
+  response:
+    body:
+      string: '{"nodeVersion":{"version":"410"},"environment":"docker","coordinator":true,"starting":false,"uptime":"6.33s"}
+
+        '
+    headers:
+      Connection:
+      - close
+      Content-Length:
+      - '110'
+      Content-Type:
+      - application/json
+      Date:
+      - Sat, 14 Mar 2026 00:55:31 GMT
+      Vary:
+      - Accept-Encoding
+      X-Content-Type-Options:
+      - nosniff
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Connection:
+      - close
+      Host:
+      - 127.0.0.1:8080
+      User-Agent:
+      - Python-urllib/3.10
+      X-Trino-User:
+      - trinops-recorder
+    method: GET
+    uri: http://127.0.0.1:8080/v1/cluster
+  response:
+    body:
+      string: '{
+
+        "servlet":"org.glassfish.jersey.servlet.ServletContainer-53a16dd6",
+
+        "message":"Not Found",
+
+        "url":"/v1/cluster",
+
+        "status":"404"
+
+        }'
+    headers:
+      Cache-Control:
+      - must-revalidate,no-cache,no-store
+      Connection:
+      - close
+      Content-Length:
+      - '130'
+      Content-Type:
+      - application/json
+    status:
+      code: 404
+      message: Not Found
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Connection:
+      - close
+      Host:
+      - 127.0.0.1:8080
+      User-Agent:
+      - Python-urllib/3.10
+      X-Trino-User:
+      - trinops-recorder
+    method: DELETE
+    uri: http://127.0.0.1:8080/v1/query/20260314_005530_00002_gbzmi
+  response:
+    body:
+      string: ''
+    headers:
+      Connection:
+      - close
+      Date:
+      - Sat, 14 Mar 2026 00:55:31 GMT
+    status:
+      code: 204
+      message: No Content
+version: 1
