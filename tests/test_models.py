@@ -207,7 +207,6 @@ def test_cluster_stats_format_line_full():
     stats = ClusterStats(
         trino_version="449",
         uptime_millis=266_400_000,
-        active_workers=8,
         total_queries=47, running=12, queued=3, finished=32, failed=0,
         total_cpu_millis=2_712_000,
         total_peak_memory_bytes=133_743_869_952,
@@ -216,7 +215,6 @@ def test_cluster_stats_format_line_full():
     )
     line = stats.format_line(width=200)
     assert "trino 449" in line
-    assert "8 workers" in line
     assert "12 run" in line
     assert "3 queued" in line
     assert "32 done" in line
@@ -234,7 +232,6 @@ def test_cluster_stats_format_line_degraded():
     )
     line = stats.format_line(width=200)
     assert "trino" not in line
-    assert "workers" not in line
     assert "up " not in line
     assert "2 run" in line
     assert "1 failed" in line
@@ -244,7 +241,6 @@ def test_cluster_stats_format_line_wraps():
     stats = ClusterStats(
         trino_version="449",
         uptime_millis=266_400_000,
-        active_workers=8,
         total_queries=47, running=12, queued=3, finished=32, failed=0,
         total_cpu_millis=2_712_000,
         total_peak_memory_bytes=133_743_869_952,

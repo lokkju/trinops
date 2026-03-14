@@ -283,15 +283,6 @@ def _exercise_endpoints(base_url: str, query_ids: list[str]) -> tuple[str, str]:
         info = json.loads(resp.read())
     print(f"    GET /v1/info: version={info.get('nodeVersion', {}).get('version', '?')}")
 
-    # GET /v1/cluster
-    req = Request(f"{base_url}/v1/cluster", headers=hdrs)
-    try:
-        with urlopen(req, timeout=30) as resp:
-            cluster = json.loads(resp.read())
-        print(f"    GET /v1/cluster: workers={cluster.get('activeWorkers')}")
-    except Exception as e:
-        print(f"    GET /v1/cluster: {e} (will be recorded as error)")
-
     # DELETE /v1/query/{id} (kill last query if still running)
     kill_id = query_ids[-1]
     req = Request(f"{base_url}/v1/query/{kill_id}", method="DELETE", headers=hdrs)

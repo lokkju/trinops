@@ -54,12 +54,6 @@ class TrinopsClient:
                     pass
             stats.starting = info.get("starting")
 
-        cluster = self._backend.get_cluster()
-        if cluster is not None:
-            workers = cluster.get("activeWorkers")
-            if workers is not None:
-                stats.active_workers = int(workers)
-
         return stats
 
     def close(self) -> None:

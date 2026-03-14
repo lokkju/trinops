@@ -48,7 +48,6 @@ class HttpQueryBackend:
         self._session = None  # requests.Session, used for oauth2/kerberos
         self._headers = self._build_auth(profile)
         self._info_state = EndpointState.UNKNOWN
-        self._cluster_state = EndpointState.UNKNOWN
 
     def _build_auth(self, profile: ConnectionProfile) -> dict[str, str]:
         """Build auth headers, or configure a requests.Session for complex auth."""
@@ -229,10 +228,6 @@ class HttpQueryBackend:
     def get_info(self) -> Optional[dict]:
         """Fetch /v1/info. Returns None if unavailable."""
         return self._try_optional_endpoint("/v1/info", "_info_state")
-
-    def get_cluster(self) -> Optional[dict]:
-        """Fetch /v1/cluster. Returns None if unavailable."""
-        return self._try_optional_endpoint("/v1/cluster", "_cluster_state")
 
     def check_connection(self) -> None:
         """Verify server reachability and auth. Raises on failure."""

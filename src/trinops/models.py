@@ -168,9 +168,6 @@ class ClusterStats:
     uptime_millis: Optional[int] = None
     starting: Optional[bool] = None
 
-    # From /v1/cluster (optional)
-    active_workers: Optional[int] = None
-
     # Aggregated from query list
     total_queries: int = 0
     running: int = 0
@@ -216,9 +213,6 @@ class ClusterStats:
         segments: list[str] = []
         if self.trino_version:
             segments.append(f"trino {self.trino_version}")
-        if self.active_workers is not None:
-            segments.append(f"{self.active_workers} workers")
-
         # Query breakdown — omit zero-count states
         parts = [f"{self.total_queries} queries:"]
         if self.running:

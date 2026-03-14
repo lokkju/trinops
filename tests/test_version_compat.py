@@ -82,22 +82,6 @@ def test_get_info(trino_version):
     assert isinstance(info["uptime"], str)
 
 
-def test_get_cluster(trino_version):
-    """get_cluster returns worker count from /v1/cluster."""
-    version, use_cassette, _metadata = trino_version
-    profile = _make_profile()
-    backend = HttpQueryBackend(profile)
-
-    with use_cassette():
-        cluster = backend.get_cluster()
-
-    if cluster is None:
-        pytest.skip(f"Trino {version} does not expose /v1/cluster")
-
-    assert "activeWorkers" in cluster
-    assert isinstance(cluster["activeWorkers"], int)
-
-
 def test_kill_query(trino_version):
     """kill_query returns True for a recorded DELETE response."""
     version, use_cassette, metadata = trino_version
