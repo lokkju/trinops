@@ -58,7 +58,7 @@ def test_cache_list_catalogs(tmp_path):
     cache.write("default", "tpch", SAMPLE_CACHE)
     cache.write("default", "hive", {**SAMPLE_CACHE, "catalog": "hive"})
     catalogs = cache.list_catalogs("default")
-    assert set(catalogs) == {"tpch", "hive"}
+    assert catalogs == ["hive", "tpch"]  # sorted
 
 
 def test_cache_list_catalogs_empty(tmp_path):
@@ -100,3 +100,13 @@ def test_cache_stats(tmp_path):
     assert stats["table_count"] == 2
     assert stats["column_count"] == 4
     assert "fetched_at" in stats
+
+
+def test_cache_list_profiles(tmp_path):
+    from trinops.schema.cache import SchemaCache
+    cache = SchemaCache(base_dir=tmp_path)
+    assert cache.list_profiles() == []
+    cache.write("default", "tpch", SAMPLE_CACHE)
+    cache.write("prod", "tpch", {**SAMPLE_CACHE, "profile": "prod"})
+    profiles = cache.list_profiles()
+    assert profiles == ["default", "prod"]  # sorted
