@@ -193,3 +193,20 @@ def test_errors_tab_no_errors():
     tab._data = FULL_QUERY_INFO
     content = tab.render_text()
     assert "No errors or warnings" in content
+
+
+def test_detail_pane_tracks_query_id():
+    from trinops.tui.detail import DetailPane
+
+    pane = DetailPane()
+    assert pane.query_id is None
+    pane.set_data(FULL_QUERY_INFO)
+    assert pane.query_id == "20260314_071543_00002_wqrmk"
+
+
+def test_detail_pane_set_data_none():
+    from trinops.tui.detail import DetailPane
+
+    pane = DetailPane()
+    pane.set_data(None)
+    assert pane.query_id is None
