@@ -283,8 +283,10 @@ def top(
 
 config_app = typer.Typer(name="config", help="Manage trinops configuration")
 auth_app = typer.Typer(name="auth", help="Manage authentication")
+schema_app = typer.Typer(name="schema", help="Manage cached schema metadata")
 app.add_typer(config_app, name="config")
 app.add_typer(auth_app, name="auth")
+app.add_typer(schema_app, name="schema")
 
 
 @config_app.command("show")
@@ -454,3 +456,224 @@ def auth_login(
     typer.echo("Starting OAuth2 flow...")
     auth = build_auth(cp)
     typer.echo("Authentication successful. Token cached.")
+
+
+# ---------------------------------------------------------------------------
+# schema subcommands
+# ---------------------------------------------------------------------------
+
+
+def _relative_age(iso_timestamp: str) -> str:
+    """Return a human-readable relative age string like '2h ago' or '3d ago'."""
+    from datetime import datetime, timezone
+
+    try:
+        dt = datetime.fromisoformat(iso_timestamp)
+        delta = datetime.now(timezone.utc) - dt
+        seconds = int(delta.total_seconds())
+        if seconds < 60:
+            return f"{seconds}s ago"
+        minutes = seconds // 60
+        if minutes < 60:
+            return f"{minutes}m ago"
+        hours = minutes // 60
+        if hours < 24:
+            return f"{hours}h ago"
+        days = hours // 24
+        return f"{days}d ago"
+    except Exception:
+        return iso_timestamp
+
+
+@schema_app.command("refresh")
+def schema_refresh(
+    server: Optional[str] = typer.Option(None, help="Trino server host:port"),
+    profile: Optional[str] = typer.Option(None, help="Config profile name"),
+    user: Optional[str] = typer.Option(None, help="Trino user"),
+    auth: Optional[str] = typer.Option(None, help="Auth method (none/basic/jwt/oauth2/kerberos)"),
+    catalog: Optional[str] = typer.Option(None, "--catalog", help="Catalog to fetch (overrides profile default)"),
+    all_catalogs: bool = typer.Option(False, "--all", help="Discover and fetch all catalogs"),
+):
+    """Fetch schema metadata from Trino and cache locally."""
+    from trinops.schema.cache import SchemaCache
+    from trinops.schema.fetcher import SchemaFetcher
+
+    cp = _build_profile(server=server, profile=profile, user=user, auth=auth)
+    profile_name = profile or "default"
+    fetcher = SchemaFetcher(cp, profile_name=profile_name)
+    cache = SchemaCache()
+
+    if all_catalogs:
+        with _status("Discovering catalogs..."):
+            catalogs = fetcher.discover_catalogs()
+        typer.echo(f"Found {len(catalogs)} catalogs", err=True)
+        for cat in catalogs:
+            try:
+                with _status(f"Fetching {cat}..."):
+                    data = fetcher.fetch_catalog(cat)
+                cache.write(profile_name, cat, data)
+                typer.echo(f"  {cat}: OK", err=True)
+            except Exception as e:
+                typer.echo(f"  {cat}: WARN {e}", err=True)
+    else:
+        cat = catalog or cp.catalog
+        if not cat:
+            typer.echo(
+                "No catalog specified. Use --catalog or set a default catalog in your profile.",
+                err=True,
+            )
+            raise typer.Exit(1)
+        with _status(f"Fetching {cat}..."):
+            data = fetcher.fetch_catalog(cat)
+        cache.write(profile_name, cat, data)
+        stats = cache.get_stats(profile_name, cat)
+        typer.echo(
+            f"Cached {stats['table_count']} tables, {stats['column_count']} columns for {cat}",
+            err=True,
+        )
+
+
+@schema_app.command("search")
+def schema_search(
+    pattern: str = typer.Argument(help="Glob pattern to match table or column names"),
+    profile: Optional[str] = typer.Option(None, help="Config profile name"),
+    catalog: Optional[str] = typer.Option(None, "--catalog", help="Limit search to catalog"),
+    columns: bool = typer.Option(False, "--columns", help="Search column names instead of table names"),
+    json: bool = typer.Option(False, "--json", help="JSON output"),
+):
+    """Search cached schema metadata for tables or columns."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from trinops.schema.cache import SchemaCache
+    from trinops.schema.search import SchemaSearch
+
+    profile_name = profile or "default"
+    cache = SchemaCache()
+    search = SchemaSearch(cache, profile=profile_name, catalog=catalog)
+
+    if columns:
+        results = search.search_columns(pattern)
+    else:
+        results = search.search_tables(pattern)
+
+    if json:
+        sys.stdout.write(_json.dumps(results))
+        sys.stdout.write("\n")
+        return
+
+    if not results:
+        typer.echo("No matches found.")
+        return
+
+    console = Console()
+    if columns:
+        table = Table(title="Column matches")
+        table.add_column("Catalog")
+        table.add_column("Schema")
+        table.add_column("Table")
+        table.add_column("Column")
+        table.add_column("Type")
+        for r in results:
+            table.add_row(r["catalog"], r["schema"], r["table"], r["column"], r["column_type"])
+    else:
+        table = Table(title="Table matches")
+        table.add_column("Catalog")
+        table.add_column("Schema")
+        table.add_column("Table")
+        table.add_column("Type")
+        for r in results:
+            table.add_row(r["catalog"], r["schema"], r["table"], r["type"])
+
+    console.print(table)
+
+
+@schema_app.command("show")
+def schema_show(
+    table_name: str = typer.Argument(help="Table name (unqualified, schema.table, or catalog.schema.table)"),
+    profile: Optional[str] = typer.Option(None, help="Config profile name"),
+    json: bool = typer.Option(False, "--json", help="JSON output"),
+):
+    """Show columns for a specific table."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from trinops.schema.cache import SchemaCache
+    from trinops.schema.search import SchemaSearch
+
+    profile_name = profile or "default"
+    cache = SchemaCache()
+    search = SchemaSearch(cache, profile=profile_name)
+    matches = search.lookup_tables(table_name)
+
+    if not matches:
+        typer.echo(f"Table not found: {table_name}", err=True)
+        raise typer.Exit(1)
+
+    if json:
+        sys.stdout.write(_json.dumps(matches))
+        sys.stdout.write("\n")
+        return
+
+    console = Console()
+    for m in matches:
+        fqn = f"{m['catalog']}.{m['schema']}.{m['table']}"
+        table = Table(title=fqn)
+        table.add_column("Column")
+        table.add_column("Type")
+        table.add_column("Nullable")
+        for col in m["columns"]:
+            table.add_row(col["name"], col["type"], str(col.get("nullable", "")))
+        console.print(table)
+
+
+@schema_app.command("list")
+def schema_list(
+    profile: Optional[str] = typer.Option(None, help="Config profile name"),
+):
+    """List cached catalogs."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from trinops.schema.cache import SchemaCache
+
+    cache = SchemaCache()
+
+    if profile:
+        profiles = [profile]
+    else:
+        profiles = cache.list_profiles()
+
+    if not profiles:
+        typer.echo("No cached catalogs found.")
+        return
+
+    console = Console()
+    table = Table(title="Cached catalogs")
+    table.add_column("Profile")
+    table.add_column("Catalog")
+    table.add_column("Tables")
+    table.add_column("Columns")
+    table.add_column("Fetched")
+
+    has_rows = False
+    for prof in profiles:
+        catalogs = cache.list_catalogs(prof)
+        for cat in catalogs:
+            stats = cache.get_stats(prof, cat)
+            if stats:
+                has_rows = True
+                age = _relative_age(stats["fetched_at"])
+                table.add_row(
+                    prof,
+                    cat,
+                    str(stats["table_count"]),
+                    str(stats["column_count"]),
+                    age,
+                )
+
+    if not has_rows:
+        typer.echo("No cached catalogs found.")
+        return
+
+    console.print(table)
