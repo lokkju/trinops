@@ -5,7 +5,7 @@ from typing import Optional
 
 from textual.app import ComposeResult
 from textual.containers import Container
-from textual.widgets import Static, TabbedContent, TabPane
+from textual.widgets import TabbedContent, TabPane
 
 from trinops.tui.tabs.overview import OverviewTab
 from trinops.tui.tabs.stats import StatsTab
@@ -67,19 +67,10 @@ class DetailPane(Container):
             self._query_id = None
             return
         self._query_id = data.get("queryId")
-        # Set data on tabs directly; update_data() requires mounted widgets
-        self._overview._data = data
-        self._stats._data = data
-        self._tables._data = data
-        self._errors._data = data
-        # If mounted, trigger visual update
-        try:
-            self._overview.update_data(data)
-            self._stats.update_data(data)
-            self._tables.update_data(data)
-            self._errors.update_data(data)
-        except Exception:
-            pass  # Not mounted yet
+        for tab in (self._overview, self._stats, self._tables, self._errors):
+            tab._data = data
+            if self.is_mounted:
+                tab.update_data(data)
 
     def show(self) -> None:
         self.add_class("visible")

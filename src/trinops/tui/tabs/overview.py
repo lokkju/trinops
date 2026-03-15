@@ -1,7 +1,6 @@
 """Overview tab for query detail pane."""
 from __future__ import annotations
 
-from rich.syntax import Syntax
 from textual.widgets import Static
 
 from trinops.formatting import format_bytes, format_time_millis, parse_data_size_bytes, parse_duration_millis

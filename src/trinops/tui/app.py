@@ -160,7 +160,6 @@ class TrinopsApp(App):
         self._flash_message: str | None = None
         self._flash_timer: Timer | None = None
         self._kill_query_id: str | None = None
-        self._detail_query_id: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -399,7 +398,6 @@ class TrinopsApp(App):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         query_id = str(event.row_key.value)
-        self._detail_query_id = query_id
         self.run_worker(
             lambda: self._fetch_query_raw(query_id),
             thread=True,
