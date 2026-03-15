@@ -150,3 +150,26 @@ def test_stats_tab_handles_missing_fields():
     tab._data = MINIMAL_QUERY_INFO
     content = tab.render_text()
     assert isinstance(content, str)
+
+
+def test_tables_tab_renders_inputs():
+    from trinops.tui.tabs.tables import TablesTab
+
+    tab = TablesTab()
+    tab._data = FULL_QUERY_INFO
+    content = tab.render_text()
+    assert "tpch.sf1.lineitem" in content
+    assert "tpch.sf1.nation" in content
+    assert "suppkey" in content
+    assert "INTEGER" in content
+    assert "name" in content
+    assert "VARCHAR" in content
+
+
+def test_tables_tab_no_inputs():
+    from trinops.tui.tabs.tables import TablesTab
+
+    tab = TablesTab()
+    tab._data = MINIMAL_QUERY_INFO
+    content = tab.render_text()
+    assert "No table information" in content
