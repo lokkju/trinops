@@ -9,6 +9,18 @@ from trinops.auth import build_auth
 from trinops.config import ConnectionProfile
 
 
+import re
+
+_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _validate_identifier(name: str) -> str:
+    """Validate that a name is a safe Trino identifier."""
+    if not _IDENTIFIER_RE.match(name):
+        raise ValueError(f"Invalid identifier: {name!r}")
+    return name
+
+
 class SchemaFetcher:
     """Connects to Trino and fetches information_schema metadata."""
 
@@ -51,18 +63,19 @@ class SchemaFetcher:
         Returns a dict with catalog name, profile, timestamp, and nested
         schema/table/column structure suitable for caching.
         """
+        cat = _validate_identifier(catalog)
         conn = self._connect()
         try:
             cursor = conn.cursor()
             cursor.execute(
-                f"SELECT schema_name FROM {catalog}.information_schema.schemata"
+                f"SELECT schema_name FROM {cat}.information_schema.schemata"
             )
             schema_names = [row[0] for row in cursor.fetchall()]
 
             cursor = conn.cursor()
             cursor.execute(
                 f"SELECT table_schema, table_name, table_type "
-                f"FROM {catalog}.information_schema.tables"
+                f"FROM {cat}.information_schema.tables"
             )
             tables_by_schema: dict[str, dict[str, dict]] = {}
             for schema, table, table_type in cursor.fetchall():
@@ -74,7 +87,7 @@ class SchemaFetcher:
             cursor = conn.cursor()
             cursor.execute(
                 f"SELECT table_schema, table_name, column_name, data_type, is_nullable "
-                f"FROM {catalog}.information_schema.columns"
+                f"FROM {cat}.information_schema.columns"
             )
             for schema, table, col_name, data_type, nullable in cursor.fetchall():
                 tbl = tables_by_schema.get(schema, {}).get(table)

@@ -481,7 +481,7 @@ def _relative_age(iso_timestamp: str) -> str:
             return f"{hours}h ago"
         days = hours // 24
         return f"{days}d ago"
-    except Exception:
+    except (ValueError, TypeError):
         return iso_timestamp
 
 
