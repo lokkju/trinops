@@ -125,3 +125,28 @@ def test_overview_tab_handles_minimal_data():
     content = tab.render_text()
     assert "bob" in content
     assert "SELECT 1" in content
+
+
+def test_stats_tab_renders_timing():
+    from trinops.tui.tabs.stats import StatsTab
+
+    tab = StatsTab()
+    tab._data = FULL_QUERY_INFO
+    content = tab.render_text()
+    assert "Queued" in content
+    assert "Planning" in content
+    assert "Execution" in content
+    assert "CPU" in content
+    assert "Input" in content
+    assert "Output" in content
+    assert "45" in content  # completed tasks
+    assert "50" in content  # total tasks
+
+
+def test_stats_tab_handles_missing_fields():
+    from trinops.tui.tabs.stats import StatsTab
+
+    tab = StatsTab()
+    tab._data = MINIMAL_QUERY_INFO
+    content = tab.render_text()
+    assert isinstance(content, str)
