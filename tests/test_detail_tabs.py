@@ -173,3 +173,23 @@ def test_tables_tab_no_inputs():
     tab._data = MINIMAL_QUERY_INFO
     content = tab.render_text()
     assert "No table information" in content
+
+
+def test_errors_tab_renders_failure():
+    from trinops.tui.tabs.errors import ErrorsTab
+
+    tab = ErrorsTab()
+    tab._data = FAILED_QUERY_INFO
+    content = tab.render_text()
+    assert "SYNTAX_ERROR" in content
+    assert "USER_ERROR" in content
+    assert "Column 'bad' cannot be resolved" in content
+
+
+def test_errors_tab_no_errors():
+    from trinops.tui.tabs.errors import ErrorsTab
+
+    tab = ErrorsTab()
+    tab._data = FULL_QUERY_INFO
+    content = tab.render_text()
+    assert "No errors or warnings" in content
