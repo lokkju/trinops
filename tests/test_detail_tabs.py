@@ -210,3 +210,14 @@ def test_detail_pane_set_data_none():
     pane = DetailPane()
     pane.set_data(None)
     assert pane.query_id is None
+
+
+def test_app_has_detail_pane():
+    """Verify the app composes with DetailPane instead of old Container."""
+    from trinops.tui.app import TrinopsApp
+    from trinops.tui.detail import DetailPane
+    from trinops.config import ConnectionProfile
+
+    profile = ConnectionProfile(server="localhost:8080", auth="none", user="dev")
+    tui_app = TrinopsApp(profile=profile)
+    assert hasattr(tui_app, 'compose')

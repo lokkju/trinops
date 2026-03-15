@@ -7,7 +7,7 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Footer, Header, Label, Static, TextArea
+from textual.widgets import Button, DataTable, Footer, Header, Label, Static
 from textual.timer import Timer
 from textual.worker import Worker, WorkerState
 
@@ -15,6 +15,7 @@ from trinops.client import TrinopsClient
 from trinops.config import ConnectionProfile
 from trinops.formatting import format_bytes as _format_bytes, format_time_millis as _format_time
 from trinops.models import ClusterStats, QueryInfo
+from trinops.tui.detail import DetailPane
 
 
 class KillConfirmScreen(ModalScreen[bool]):
@@ -124,24 +125,6 @@ class TrinopsApp(App):
     #status-bar {
         height: 1;
     }
-    #detail-pane {
-        height: auto;
-        max-height: 50%;
-        border-top: solid green;
-        display: none;
-    }
-    #detail-pane.visible {
-        display: block;
-    }
-    #detail-meta {
-        height: auto;
-        padding: 0 1;
-    }
-    #detail-sql {
-        height: 1fr;
-        min-height: 5;
-        padding: 0 1;
-    }
 """
 
     BINDINGS = [
@@ -177,16 +160,13 @@ class TrinopsApp(App):
         self._flash_message: str | None = None
         self._flash_timer: Timer | None = None
         self._kill_query_id: str | None = None
+        self._detail_query_id: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield ClusterHeader(id="cluster-header")
         yield DataTable(id="query-table")
-        yield Container(
-            Static(id="detail-meta"),
-            TextArea(id="detail-sql", read_only=True),
-            id="detail-pane",
-        )
+        yield DetailPane(id="detail-pane")
         yield StatusBar(id="status-bar")
         yield Footer()
 
@@ -281,6 +261,8 @@ class TrinopsApp(App):
             self._on_queries_done(event)
         elif event.worker.name == "_fetch_stats":
             self._on_stats_done(event)
+        elif event.worker.name == "_fetch_query_raw":
+            self._on_detail_done(event)
         elif event.worker.name == "_do_kill_query":
             self._on_kill_done(event)
 
@@ -384,26 +366,25 @@ class TrinopsApp(App):
                 except Exception:
                     break
 
-    def _show_detail(self, qi: QueryInfo) -> None:
-        pane = self.query_one("#detail-pane")
-        meta = self.query_one("#detail-meta", Static)
-        sql_area = self.query_one("#detail-sql", TextArea)
+    def _show_detail_raw(self, data: dict) -> None:
+        pane = self.query_one("#detail-pane", DetailPane)
+        pane.set_data(data)
+        pane.show()
 
-        lines = [
-            f"Query ID: {qi.query_id}    State: {qi.state.value}    User: {qi.user}",
-            f"Elapsed: {_format_time(qi.elapsed_time_millis)}    "
-            f"CPU: {_format_time(qi.cpu_time_millis)}    "
-            f"Rows: {qi.processed_rows:,}    "
-            f"Data: {_format_bytes(qi.processed_bytes)}    "
-            f"Memory: {_format_bytes(qi.peak_memory_bytes)}",
-        ]
-        if qi.error_message:
-            lines.append(f"Error: {qi.error_message}")
+    def _fetch_query_raw(self, query_id: str) -> dict | None:
+        if self._client is None:
+            self._client = TrinopsClient.from_profile(self._profile)
+        return self._client.get_query_raw(query_id)
 
-        meta.update("\n".join(lines))
-        sql_area.load_text(qi.query)
-        pane.add_class("visible")
-        sql_area.focus()
+    def _on_detail_done(self, event: Worker.StateChanged) -> None:
+        if event.state == WorkerState.SUCCESS:
+            data = event.worker.result
+            if data is None:
+                self._flash("Query no longer available")
+                return
+            self._show_detail_raw(data)
+        elif event.state == WorkerState.ERROR:
+            self._flash(f"Failed to load query detail: {event.worker.error}")
 
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         table = self.query_one("#query-table", DataTable)
@@ -417,14 +398,17 @@ class TrinopsApp(App):
         table.sort(col_key, reverse=self._sort_reverse)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        for qi in self._queries:
-            if qi.query_id == str(event.row_key.value):
-                self._show_detail(qi)
-                return
+        query_id = str(event.row_key.value)
+        self._detail_query_id = query_id
+        self.run_worker(
+            lambda: self._fetch_query_raw(query_id),
+            thread=True,
+            name="_fetch_query_raw",
+        )
 
     def action_close_detail(self) -> None:
-        pane = self.query_one("#detail-pane")
-        pane.remove_class("visible")
+        pane = self.query_one("#detail-pane", DetailPane)
+        pane.hide()
         self.query_one("#query-table", DataTable).focus()
 
     def action_quit(self) -> None:
@@ -444,13 +428,23 @@ class TrinopsApp(App):
     def action_kill_query(self) -> None:
         if not self._profile.allow_kill:
             return
-        table = self.query_one("#query-table", DataTable)
-        if table.row_count == 0 or table.cursor_row is None:
+
+        pane = self.query_one("#detail-pane", DetailPane)
+        query_id = None
+        if pane.has_class("visible") and pane.query_id:
+            query_id = pane.query_id
+        else:
+            table = self.query_one("#query-table", DataTable)
+            if table.row_count == 0 or table.cursor_row is None:
+                return
+            try:
+                query_id = str(table.get_row_at(table.cursor_row)[0])
+            except Exception:
+                return
+
+        if query_id is None:
             return
-        try:
-            query_id = str(table.get_row_at(table.cursor_row)[0])
-        except Exception:
-            return
+
         qi = None
         for q in self._queries:
             if q.query_id == query_id:
