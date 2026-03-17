@@ -61,7 +61,7 @@ class QueryInfo:
         return self.state.is_terminal
 
     def truncated_sql(self, max_len: int = 80) -> str:
-        sql = self.query.replace("\n", " ").strip()
+        sql = re.sub(r"\s+", " ", self.query).strip()
         if len(sql) <= max_len:
             return sql
         return sql[: max_len - 3] + "..."

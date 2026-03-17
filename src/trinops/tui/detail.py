@@ -4,8 +4,10 @@ from __future__ import annotations
 from typing import Optional
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Container
 from textual.widgets import TabbedContent, TabPane
+from textual.widgets._tabs import Tabs
 
 from trinops.tui.tabs.overview import OverviewTab
 from trinops.tui.tabs.stats import StatsTab
@@ -18,12 +20,27 @@ class DetailPane(Container):
 
     Receives raw REST API response dict via set_data().
     Tracks query_id for kill-from-detail support.
+    Focus lives on this container; scroll keys are forwarded to the active TabPane.
     """
+
+    can_focus = True
+
+    BINDINGS = [
+        Binding("up", "scroll_up", "Scroll up", show=False),
+        Binding("down", "scroll_down", "Scroll down", show=False),
+        Binding("left", "prev_tab", "Prev tab", show=False),
+        Binding("right", "next_tab", "Next tab", show=False),
+        Binding("pageup", "page_up", "Page up", show=False),
+        Binding("pagedown", "page_down", "Page down", show=False),
+        Binding("home", "scroll_home", "Top", show=False),
+        Binding("end", "scroll_end", "Bottom", show=False),
+        Binding("c", "copy_tab", "Copy"),
+        Binding("escape", "close_detail", "Close"),
+    ]
 
     DEFAULT_CSS = """
     DetailPane {
-        height: auto;
-        max-height: 50%;
+        height: 60%;
         border-top: solid green;
         display: none;
     }
@@ -31,11 +48,15 @@ class DetailPane(Container):
         display: block;
     }
     DetailPane TabbedContent {
-        height: auto;
+        height: 1fr;
+    }
+    DetailPane ContentSwitcher {
+        height: 1fr;
     }
     DetailPane TabPane {
-        height: auto;
+        height: 1fr;
         padding: 0;
+        overflow-y: auto;
     }
     """
 
@@ -50,6 +71,24 @@ class DetailPane(Container):
     @property
     def query_id(self) -> Optional[str]:
         return self._query_id
+
+    _TAB_MAP: dict[str, str] = {
+        "tab-1": "_overview",
+        "tab-2": "_stats",
+        "tab-3": "_tables",
+        "tab-4": "_errors",
+    }
+
+    def _active_pane(self) -> TabPane | None:
+        tc = self.query_one(TabbedContent)
+        return tc.active_pane
+
+    def _active_tab_widget(self) -> OverviewTab | StatsTab | TablesTab | ErrorsTab | None:
+        tc = self.query_one(TabbedContent)
+        attr = self._TAB_MAP.get(tc.active)
+        if attr is not None:
+            return getattr(self, attr)
+        return None
 
     def compose(self) -> ComposeResult:
         with TabbedContent():
@@ -79,3 +118,50 @@ class DetailPane(Container):
     def hide(self) -> None:
         self.remove_class("visible")
         self._query_id = None
+
+    def action_scroll_up(self) -> None:
+        pane = self._active_pane()
+        if pane is not None:
+            pane.scroll_up()
+
+    def action_scroll_down(self) -> None:
+        pane = self._active_pane()
+        if pane is not None:
+            pane.scroll_down()
+
+    def action_page_up(self) -> None:
+        pane = self._active_pane()
+        if pane is not None:
+            pane.scroll_page_up()
+
+    def action_page_down(self) -> None:
+        pane = self._active_pane()
+        if pane is not None:
+            pane.scroll_page_down()
+
+    def action_scroll_home(self) -> None:
+        pane = self._active_pane()
+        if pane is not None:
+            pane.scroll_home()
+
+    def action_scroll_end(self) -> None:
+        pane = self._active_pane()
+        if pane is not None:
+            pane.scroll_end()
+
+    def action_next_tab(self) -> None:
+        self.query_one(Tabs).action_next_tab()
+
+    def action_prev_tab(self) -> None:
+        self.query_one(Tabs).action_previous_tab()
+
+    def action_close_detail(self) -> None:
+        self.app.action_close_detail()
+
+    def action_copy_tab(self) -> None:
+        tab = self._active_tab_widget()
+        if tab is None:
+            return
+        text = tab.render_text()
+        self.app.copy_to_clipboard(text)
+        self.app._flash("Copied to clipboard")

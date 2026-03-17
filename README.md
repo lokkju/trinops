@@ -83,6 +83,33 @@ trinops query <query-id> --json
 trinops query <query-id> --select queryId,state,queryStats.elapsedTime,queryStats.peakUserMemoryReservation
 ```
 
+### Schema search
+
+Cache catalog metadata locally and search across tables and columns:
+
+```bash
+# Cache a specific catalog
+trinops schema refresh --catalog tpch
+
+# Cache all discoverable catalogs
+trinops schema refresh --all
+
+# Search for tables
+trinops schema search "lineitem"
+trinops schema search "order*"
+
+# Search for columns
+trinops schema search --columns "customer_id"
+
+# Show table details
+trinops schema show tpch.sf1.lineitem
+
+# List cached catalogs
+trinops schema list
+```
+
+All schema commands support `--json` output and `--profile` for multi-cluster setups.
+
 ### TUI dashboard
 
 ```bash
@@ -90,7 +117,33 @@ trinops tui
 trinops top  # alias
 ```
 
-The dashboard shows a live-updating table of queries with sorting, detail pane, and configurable refresh interval. Keybindings: `r` refresh, `u` toggle user filter, `a` show all, `-/+` adjust refresh rate, `q` quit.
+The dashboard shows a live-updating table of queries with sorting, a tabbed detail pane, and configurable refresh interval.
+
+Keybindings:
+
+| Key | Action |
+|-----|--------|
+| `r` | Force refresh |
+| `u` | Toggle user filter |
+| `a` | Show all users |
+| `-` / `+` | Adjust refresh interval |
+| `Enter` | Open detail pane for selected query |
+| `Escape` | Close detail pane |
+| `k` | Kill selected query (when enabled) |
+| `Tab` / `Shift+Tab` | Cycle focus between table and detail pane |
+| `q` | Quit |
+
+When the detail pane is open:
+
+| Key | Action |
+|-----|--------|
+| `Up` / `Down` | Scroll tab content |
+| `Left` / `Right` | Switch between tabs |
+| `PgUp` / `PgDn` | Page scroll |
+| `Home` / `End` | Jump to top/bottom |
+| `c` | Copy current tab content to clipboard |
+
+Click column headers to sort; click again to reverse. Default sort is by Elapsed time, descending.
 
 ## Configuration
 
@@ -172,12 +225,15 @@ A [Claude Code plugin](/.claude-plugin/plugin.json) is also included for marketp
 
 ## Roadmap
 
-Planned features, roughly in priority order:
+Completed:
 
-- **Kill query support** — cancel running queries from CLI and TUI, gated behind a config setting ([#1](https://github.com/lokkju/trinops/issues/1))
-- **Enriched TUI detail** — tabbed query detail view with stats, stages, plan, and table access info ([#2](https://github.com/lokkju/trinops/issues/2))
+- ~~**Kill query support**~~ — cancel running queries from CLI and TUI ([#1](https://github.com/lokkju/trinops/issues/1))
+- ~~**Enriched TUI detail**~~ — tabbed detail view with overview, stats, tables, and errors ([#2](https://github.com/lokkju/trinops/issues/2))
+- ~~**Schema cache and search**~~ — cache catalog metadata locally, search tables/columns ([#3](https://github.com/lokkju/trinops/issues/3))
+
+Planned:
+
 - **Query plan visualization** — render the stage tree from the REST API in both CLI and TUI ([#5](https://github.com/lokkju/trinops/issues/5))
-- **Schema cache and search** — cache catalog metadata locally and search across tables/columns ([#3](https://github.com/lokkju/trinops/issues/3))
 - **MCP server** — Model Context Protocol server for AI assistant integration ([#4](https://github.com/lokkju/trinops/issues/4))
 - **Multi-cluster support** — switch between profiles in the TUI, unified multi-cluster view ([#6](https://github.com/lokkju/trinops/issues/6))
 - **Notifications and alerts** — desktop notifications and webhooks for long-running queries and failures ([#7](https://github.com/lokkju/trinops/issues/7))

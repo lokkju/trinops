@@ -122,6 +122,16 @@ class TrinopsApp(App):
     #query-table {
         height: 1fr;
     }
+    #empty-message {
+        width: 100%;
+        height: 1fr;
+        content-align: center middle;
+        color: $text-muted;
+        display: none;
+    }
+    #empty-message.visible {
+        display: block;
+    }
     #status-bar {
         height: 1;
     }
@@ -132,12 +142,11 @@ class TrinopsApp(App):
         ("r", "refresh", "Refresh"),
         ("u", "toggle_user", "My queries"),
         ("a", "show_all", "All queries"),
-        ("escape", "close_detail", "Close detail"),
+        Binding("escape", "close_detail", "Close detail", show=False),
         Binding("-", "interval_up", "Refresh rate", key_display="-/+"),
         Binding("+", "interval_down", "", show=False),
         ("tab", "focus_next", "Next pane"),
         ("shift+tab", "focus_previous", "Prev pane"),
-        Binding("k", "kill_query", "Kill query", show=False),
     ]
 
     INTERVAL_STEPS = [5, 10, 15, 30, 60, 120, 300]
@@ -165,22 +174,26 @@ class TrinopsApp(App):
         yield Header(show_clock=True)
         yield ClusterHeader(id="cluster-header")
         yield DataTable(id="query-table")
+        yield Static("No queries", id="empty-message")
         yield DetailPane(id="detail-pane")
         yield StatusBar(id="status-bar")
         yield Footer()
 
+    _COLUMN_LABELS = ("Query ID", "State", "User", "Elapsed", "Rows", "Memory", "SQL")
+
     def on_mount(self) -> None:
         table = self.query_one("#query-table", DataTable)
-        table.add_columns("Query ID", "State", "User", "Elapsed", "Rows", "Memory", "SQL")
+        col_keys = table.add_columns(*self._COLUMN_LABELS)
         table.cursor_type = "row"
+        # Default sort: Elapsed descending (index 3)
+        self._sort_col = col_keys[3]
+        self._sort_reverse = True
+        self._update_column_carets()
 
-        # Show kill binding in footer only when allow_kill is enabled
         if self._profile.allow_kill:
-            for binding in self._bindings:
-                if binding.action == "kill_query":
-                    binding.show = True
-                    break
+            self.bind("k", "kill_query", description="Kill query")
 
+        table.focus()
         self._update_status_bar()
         self._refresh_timer = self.set_interval(self._interval, self._schedule_refresh)
         self._stats_timer = self.set_interval(self._interval, self._schedule_stats_refresh)
@@ -223,6 +236,7 @@ class TrinopsApp(App):
 
     def watch_show_all_users(self) -> None:
         self._update_status_bar()
+        self._update_empty_message()
         self._schedule_refresh()
 
     # --- Query worker ---
@@ -232,6 +246,7 @@ class TrinopsApp(App):
             return
         self._refreshing = True
         self._update_status_bar()
+        self._update_empty_message()
         self.run_worker(self._fetch_queries, thread=True)
 
     def _fetch_queries(self) -> list[QueryInfo]:
@@ -270,20 +285,26 @@ class TrinopsApp(App):
             self._queries = event.worker.result
             if not self._loaded:
                 self._loaded = True
-            self._update_table()
-            self._last_refresh = time.monotonic()
             self._refreshing = False
+            self._last_refresh = time.monotonic()
+            self._update_table()
+            self._update_empty_message()
             self._update_status_bar()
             # Trigger stats refresh so header picks up the new query data
             self._schedule_stats_refresh()
         elif event.state in (WorkerState.ERROR, WorkerState.CANCELLED):
             self._refreshing = False
+            error = event.worker.error if event.state == WorkerState.ERROR else None
+            if error is not None:
+                self._handle_worker_error(error)
             self._update_status_bar()
 
     def _on_stats_done(self, event: Worker.StateChanged) -> None:
         if event.state == WorkerState.SUCCESS:
             header = self.query_one("#cluster-header", ClusterHeader)
             header.update_stats(event.worker.result)
+        elif event.state == WorkerState.ERROR and event.worker.error is not None:
+            self._handle_worker_error(event.worker.error)
         self._stats_refreshing = False
 
     def _on_kill_done(self, event: Worker.StateChanged) -> None:
@@ -303,6 +324,19 @@ class TrinopsApp(App):
             self._client = TrinopsClient.from_profile(self._profile)
         return self._client.kill_query(query_id)
 
+    def _handle_worker_error(self, error: BaseException) -> None:
+        error_name = type(error).__name__
+        msg = str(error)
+        if "auth" in error_name.lower() or "401" in msg:
+            self._flash(f"Auth failed: {msg}", duration=10.0)
+            # Reset client so next refresh retries auth
+            self._client = None
+        elif "connect" in error_name.lower() or "connection" in msg.lower():
+            self._flash(f"Connection error: {msg}", duration=10.0)
+            self._client = None
+        else:
+            self._flash(f"Error: {msg}", duration=5.0)
+
     def _flash(self, message: str, duration: float = 3.0) -> None:
         self._flash_message = message
         self._update_status_bar()
@@ -314,6 +348,25 @@ class TrinopsApp(App):
         self._flash_message = None
         self._flash_timer = None
         self._update_status_bar()
+
+    def _update_empty_message(self) -> None:
+        empty = self.query_one("#empty-message", Static)
+        table = self.query_one("#query-table", DataTable)
+        detail = self.query_one("#detail-pane", DetailPane)
+        show_empty = table.row_count == 0
+        if show_empty:
+            user = "all users" if self.show_all_users else (self._profile.user or "?")
+            if self._refreshing or not self._loaded:
+                empty.update(f"Refreshing queries for {user}")
+            else:
+                empty.update(f"No queries for {user}")
+            empty.add_class("visible")
+            table.display = False
+        else:
+            empty.remove_class("visible")
+            table.display = True
+            if not detail.has_class("visible"):
+                table.focus()
 
     def _update_table(self) -> None:
         table = self.query_one("#query-table", DataTable)
@@ -356,6 +409,9 @@ class TrinopsApp(App):
             else:
                 table.add_row(*row, key=qi_id)
 
+        if self._sort_col is not None:
+            table.sort(self._sort_col, reverse=self._sort_reverse)
+
         if cursor_key is not None:
             for idx in range(table.row_count):
                 try:
@@ -388,13 +444,24 @@ class TrinopsApp(App):
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         table = self.query_one("#query-table", DataTable)
         col_key = event.column_key
-        # Toggle sort direction if clicking the same column again
-        if getattr(self, "_sort_col", None) == col_key:
-            self._sort_reverse = not getattr(self, "_sort_reverse", False)
+        if self._sort_col == col_key:
+            self._sort_reverse = not self._sort_reverse
         else:
             self._sort_col = col_key
             self._sort_reverse = False
         table.sort(col_key, reverse=self._sort_reverse)
+        self._update_column_carets()
+
+    def _update_column_carets(self) -> None:
+        table = self.query_one("#query-table", DataTable)
+        for col_key, column in table.columns.items():
+            idx = list(table.columns.keys()).index(col_key)
+            base = self._COLUMN_LABELS[idx]
+            if col_key == self._sort_col:
+                caret = " \u25b2" if not self._sort_reverse else " \u25bc"
+                column.label = base + caret
+            else:
+                column.label = base
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         query_id = str(event.row_key.value)
