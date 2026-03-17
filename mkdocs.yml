@@ -1,0 +1,61 @@
+site_name: trino.ps
+site_url: https://trino.ps
+site_description: Trino query monitoring from the terminal
+site_author: Loki Coyote
+
+repo_url: https://github.com/lokkju/trinops
+repo_name: lokkju/trinops
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    scheme: slate
+  font:
+    code: JetBrains Mono
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+
+extra_css:
+  - overrides/assets/stylesheets/custom.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/lokkju/trinops
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/trinops/
+
+nav:
+  - Home: index.md
+  - Documentation:
+    - Getting Started: docs/getting-started.md
+    - TUI Dashboard: docs/tui.md
+    - Schema Search: docs/schema.md
+    - Configuration: docs/configuration.md
+    - CLI Reference: docs/cli.md
+    - Python Library: docs/library.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
