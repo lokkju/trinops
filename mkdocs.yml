@@ -27,6 +27,9 @@ theme:
 extra_css:
   - overrides/assets/stylesheets/custom.css
 
+extra_javascript:
+  - overrides/assets/javascripts/installer-selector.js
+
 extra:
   social:
     - icon: fontawesome/brands/github
