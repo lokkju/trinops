@@ -318,6 +318,48 @@ async def capture_all() -> None:
         await pilot.pause()
         app.save_screenshot(f"{OUTPUT_DIR}/empty-state.svg")
 
+    # Hero PNG (for OG image / social cards)
+    svg_to_png(f"{OUTPUT_DIR}/query-list.svg", f"{OUTPUT_DIR}/hero.png")
+
+    # Hero GIF — sequence: load → detail → tabs → sort (matches spec)
+    gif_frames = [
+        f"{OUTPUT_DIR}/query-list.svg",       # load
+        f"{OUTPUT_DIR}/detail-overview.svg",   # detail
+        f"{OUTPUT_DIR}/detail-stats.svg",      # tabs (Stats)
+        f"{OUTPUT_DIR}/detail-tables.svg",     # tabs (Tables)
+        f"{OUTPUT_DIR}/query-list.svg",        # back to list (sort visible)
+    ]
+    # Convert each frame to a temp PNG in an isolated temp directory
+    import tempfile
+    tmpdir = tempfile.mkdtemp(prefix="trinops-hero-")
+    temp_pngs = []
+    for i, svg in enumerate(gif_frames):
+        tmp = os.path.join(tmpdir, f"frame_{i}.png")
+        svg_to_png(svg, tmp, scale=1.5)
+        temp_pngs.append(tmp)
+    assemble_gif(temp_pngs, f"{OUTPUT_DIR}/hero.gif", duration_ms=2000)
+    import shutil
+    shutil.rmtree(tmpdir)
+
+
+def svg_to_png(svg_path: str, png_path: str, scale: float = 2.0) -> None:
+    """Convert an SVG file to PNG at the given scale factor."""
+    import cairosvg
+    cairosvg.svg2png(url=svg_path, write_to=png_path, scale=scale)
+
+
+def assemble_gif(png_paths: list[str], gif_path: str, duration_ms: int = 1500) -> None:
+    """Combine multiple PNGs into an animated GIF."""
+    from PIL import Image
+    frames = [Image.open(p) for p in png_paths]
+    frames[0].save(
+        gif_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=duration_ms,
+        loop=0,
+    )
+
 
 if __name__ == "__main__":
     asyncio.run(capture_all())

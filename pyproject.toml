@@ -55,6 +55,8 @@ packages = ["src/trinops"]
 
 [dependency-groups]
 dev = [
+    "cairosvg>=2.9.0",
+    "pillow>=12.1.1",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "tqdm>=4.60",
