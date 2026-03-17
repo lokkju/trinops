@@ -8,7 +8,7 @@
 Trino query monitoring from the terminal. CLI commands for listing and inspecting queries, a live TUI dashboard, and a progress-tracking library for use in Python scripts.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/lokkju/trinops/main/docs/tui-screenshot.png" alt="trinops TUI dashboard" width="100%">
+  <img src="https://raw.githubusercontent.com/lokkju/trinops/main/docs/screenshots/query-list.svg" alt="trinops TUI dashboard" width="100%">
 </p>
 
 ## Installation
