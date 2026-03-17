@@ -1,11 +1,11 @@
-"""Generate a TUI screenshot with mock data for the README."""
+"""Generate TUI screenshots with mock data for documentation."""
 
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
 
 from trinops.config import ConnectionProfile
 from trinops.models import QueryInfo, QueryState
@@ -121,34 +121,203 @@ MOCK_QUERIES = [
     ),
 ]
 
+MOCK_DETAIL_DATA = {
+    "queryId": "20260311_091522_00142_abcde",
+    "state": "RUNNING",
+    "queryType": "SELECT",
+    "query": "SELECT customer_id, SUM(order_total) AS revenue\nFROM warehouse.sales.orders\nWHERE order_date >= DATE '2026-01-01'\nGROUP BY customer_id\nORDER BY revenue DESC\nLIMIT 100",
+    "session": {
+        "user": "analytics",
+        "source": "trinops",
+        "catalog": "warehouse",
+        "schema": "sales",
+    },
+    "resourceGroupId": ["global", "analytics"],
+    "queryStats": {
+        "createTime": "2026-03-11T09:15:22.000Z",
+        "endTime": None,
+        "elapsedTime": "12.87s",
+        "queuedTime": "0.10s",
+        "planningTime": "0.42s",
+        "executionTime": "12.35s",
+        "totalCpuTime": "34.21s",
+        "physicalInputDataSize": "1073741824B",
+        "physicalInputPositions": 48291053,
+        "processedInputDataSize": "536870912B",
+        "processedInputPositions": 24145526,
+        "outputDataSize": "8388608B",
+        "outputPositions": 100,
+        "physicalWrittenDataSize": "0B",
+        "spilledDataSize": "0B",
+        "peakUserMemoryReservation": "268435456B",
+        "peakTotalMemoryReservation": "536870912B",
+        "cumulativeUserMemory": 500000000.0,
+        "completedTasks": 38,
+        "totalTasks": 42,
+        "completedDrivers": 380,
+        "totalDrivers": 420,
+    },
+    "inputs": [
+        {
+            "catalogName": "warehouse",
+            "schema": "sales",
+            "table": "orders",
+            "columns": [
+                {"name": "customer_id", "type": "BIGINT"},
+                {"name": "order_total", "type": "DECIMAL(12,2)"},
+                {"name": "order_date", "type": "DATE"},
+            ],
+        },
+    ],
+    "errorCode": None,
+    "failureInfo": None,
+    "warnings": [],
+}
+
+MOCK_FAILED_DETAIL = {
+    "queryId": "20260311_090830_00051_efghi",
+    "state": "FAILED",
+    "queryType": "SELECT",
+    "query": "SELECT * FROM hive.raw.events WHERE event_date = CURRENT_DATE AND payload.action = 'purchase'",
+    "session": {"user": "analytics", "source": "trinops"},
+    "queryStats": {
+        "createTime": "2026-03-11T09:08:30.000Z",
+        "endTime": "2026-03-11T09:08:32.300Z",
+        "elapsedTime": "2.30s",
+        "queuedTime": "0.10s",
+        "totalCpuTime": "1.20s",
+        "peakUserMemoryReservation": "67108864B",
+        "peakTotalMemoryReservation": "134217728B",
+        "cumulativeUserMemory": 100000000.0,
+        "processedInputPositions": 0,
+        "physicalInputDataSize": "0B",
+        "completedTasks": 1,
+        "totalTasks": 1,
+        "completedDrivers": 2,
+        "totalDrivers": 2,
+    },
+    "errorCode": {"code": 1, "name": "SYNTAX_ERROR", "type": "USER_ERROR"},
+    "failureInfo": {"message": "line 1:72: Column 'payload.action' cannot be resolved"},
+    "warnings": [],
+}
+
+
+class _FakeTimer:
+    """Stands in for a Textual Timer so stop() calls don't raise."""
+
+    def stop(self) -> None:
+        pass
+
 
 class MockTrinopsApp(TrinopsApp):
-    """TrinopsApp subclass that uses mock data instead of a real Trino connection."""
+    """TrinopsApp subclass that uses mock data instead of a real Trino connection.
 
-    def on_mount(self) -> None:
-        table = self.query_one("#query-table")
-        table.add_columns("Query ID", "State", "User", "Elapsed", "Rows", "Memory", "SQL")
-        table.cursor_type = "row"
-        # Load mock data directly
-        self._queries = MOCK_QUERIES
+    The real TrinopsApp.on_mount runs first (via Textual's MRO dispatch) and sets
+    up the DataTable columns, sort state, and carets.  We intercept the two
+    scheduling methods so they load mock data synchronously instead of spawning
+    workers, and we override set_interval so no background timers fire.
+    """
+
+    _mock_empty: bool = False
+    _mock_detail_data: dict | None = None
+
+    def set_interval(self, *args, **kwargs) -> _FakeTimer:  # type: ignore[override]
+        return _FakeTimer()
+
+    def _schedule_refresh(self) -> None:
+        """Load mock data directly instead of spawning a Trino worker."""
+        self._queries = [] if self._mock_empty else MOCK_QUERIES
         self._loaded = True
+        self._refreshing = False
         self._last_refresh = time.monotonic()
         self._update_table()
+        self._update_empty_message()
         self._update_status_bar()
-        # Don't start any timers or workers
+
+    def _schedule_stats_refresh(self) -> None:
+        pass  # No cluster to query.
+
+    def _fetch_query_raw(self, query_id: str) -> dict | None:
+        """Return mock detail data instead of hitting the Trino API."""
+        if self._mock_detail_data is not None:
+            return self._mock_detail_data
+        return MOCK_DETAIL_DATA
 
 
-async def take_screenshot():
+OUTPUT_DIR = "docs/screenshots"
+
+
+async def capture_all() -> None:
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     profile = ConnectionProfile(
         server="trino.example.com:443",
         user="analytics",
+        allow_kill=True,
+        confirm_kill=True,
     )
+
+    # 1. Query list (default view with sort caret)
     app = MockTrinopsApp(profile=profile, interval=30.0)
-    async with app.run_test(size=(120, 24)) as pilot:
-        # Let the app render
+    async with app.run_test(size=(140, 32)) as pilot:
         await pilot.pause()
-        app.save_screenshot("docs/tui-screenshot.svg")
+        app.save_screenshot(f"{OUTPUT_DIR}/query-list.svg")
+
+    # 2. Detail pane — Overview tab
+    app = MockTrinopsApp(profile=profile, interval=30.0)
+    async with app.run_test(size=(140, 42)) as pilot:
+        await pilot.pause()
+        app._show_detail_raw(MOCK_DETAIL_DATA)
+        await pilot.pause()
+        app.save_screenshot(f"{OUTPUT_DIR}/detail-overview.svg")
+
+    # 3. Detail pane — Stats tab
+    app = MockTrinopsApp(profile=profile, interval=30.0)
+    async with app.run_test(size=(140, 42)) as pilot:
+        await pilot.pause()
+        app._show_detail_raw(MOCK_DETAIL_DATA)
+        await pilot.pause()
+        await pilot.press("right")  # Switch to Stats tab
+        await pilot.pause()
+        app.save_screenshot(f"{OUTPUT_DIR}/detail-stats.svg")
+
+    # 4. Detail pane — Tables tab
+    app = MockTrinopsApp(profile=profile, interval=30.0)
+    async with app.run_test(size=(140, 42)) as pilot:
+        await pilot.pause()
+        app._show_detail_raw(MOCK_DETAIL_DATA)
+        await pilot.pause()
+        await pilot.press("right")  # Stats
+        await pilot.press("right")  # Tables
+        await pilot.pause()
+        app.save_screenshot(f"{OUTPUT_DIR}/detail-tables.svg")
+
+    # 5. Detail pane — Errors tab (failed query)
+    app = MockTrinopsApp(profile=profile, interval=30.0)
+    async with app.run_test(size=(140, 42)) as pilot:
+        await pilot.pause()
+        app._show_detail_raw(MOCK_FAILED_DETAIL)
+        await pilot.pause()
+        await pilot.press("right")  # Stats
+        await pilot.press("right")  # Tables
+        await pilot.press("right")  # Errors
+        await pilot.pause()
+        app.save_screenshot(f"{OUTPUT_DIR}/detail-errors.svg")
+
+    # 6. Kill confirmation dialog
+    app = MockTrinopsApp(profile=profile, interval=30.0)
+    async with app.run_test(size=(140, 32)) as pilot:
+        await pilot.pause()
+        await pilot.press("k")  # Trigger kill dialog on first row
+        await pilot.pause()
+        app.save_screenshot(f"{OUTPUT_DIR}/kill-confirm.svg")
+
+    # 7. Empty state
+    app = MockTrinopsApp(profile=profile, interval=30.0)
+    app._mock_empty = True
+    async with app.run_test(size=(140, 32)) as pilot:
+        await pilot.pause()
+        app.save_screenshot(f"{OUTPUT_DIR}/empty-state.svg")
 
 
 if __name__ == "__main__":
-    asyncio.run(take_screenshot())
+    asyncio.run(capture_all())
