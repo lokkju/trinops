@@ -1,0 +1,18 @@
+[tools]
+uv = "latest"
+
+[tasks.build]
+description = "Build the MkDocs site"
+run = "uv tool run --with mkdocs-material mkdocs build --strict"
+
+[tasks.serve]
+description = "Start local MkDocs dev server"
+run = "uv tool run --with mkdocs-material mkdocs serve"
+
+[tasks.clean]
+description = "Remove build output"
+run = "rm -rf site/"
+
+[tasks.rebuild]
+description = "Clean and rebuild"
+depends = ["clean", "build"]
