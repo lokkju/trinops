@@ -14,12 +14,27 @@ export default defineConfig({
 			],
 			customCss: ['./src/styles/custom.css'],
 			sidebar: [
-				{ label: 'Getting Started', slug: 'docs/getting-started' },
-				{ label: 'TUI Dashboard', slug: 'docs/tui' },
-				{ label: 'Schema Search', slug: 'docs/schema' },
-				{ label: 'Configuration', slug: 'docs/configuration' },
-				{ label: 'CLI Reference', slug: 'docs/cli' },
-				{ label: 'Python Library', slug: 'docs/library' },
+				{
+					label: 'Start Here',
+					items: [
+						{ label: 'Getting Started', slug: 'docs/getting-started' },
+					],
+				},
+				{
+					label: 'Guides',
+					items: [
+						{ label: 'TUI Dashboard', slug: 'docs/tui' },
+						{ label: 'Schema Search', slug: 'docs/schema' },
+					],
+				},
+				{
+					label: 'Reference',
+					items: [
+						{ label: 'Configuration', slug: 'docs/configuration' },
+						{ label: 'CLI Reference', slug: 'docs/cli' },
+						{ label: 'Python Library', slug: 'docs/library' },
+					],
+				},
 			],
 		}),
 	],
