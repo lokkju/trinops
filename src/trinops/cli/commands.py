@@ -614,6 +614,7 @@ def schema_show(
     name: Optional[str] = typer.Argument(None, help="Name to browse: catalog, catalog.schema, catalog.schema.table, or table"),
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
     catalog: Optional[str] = typer.Option(None, "--catalog", help="Limit to catalog (for full dump)"),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="Expand the full tree below the current level"),
     json: bool = typer.Option(False, "--json", help="JSON output"),
 ):
     """Browse schema hierarchy or show table columns.
@@ -622,6 +623,8 @@ def schema_show(
     One part: list schemas in that catalog.
     Two parts: list tables in catalog.schema.
     Three parts (or unqualified table name): show columns.
+
+    Use --recursive to expand everything below the current level.
     """
     from rich.console import Console
     from rich.table import Table
@@ -635,7 +638,7 @@ def schema_show(
     console = Console()
 
     if name is None:
-        # No argument: list catalogs, or dump everything with --json
+        # No argument: list catalogs, or dump everything with --json/--recursive
         if json:
             sys.stdout.write(_json.dumps(search.dump_all()))
             sys.stdout.write("\n")
@@ -643,6 +646,9 @@ def schema_show(
         catalogs = search.list_catalogs()
         if not catalogs:
             typer.echo("No cached catalogs found.")
+            return
+        if recursive:
+            _print_tree(console, search, catalogs)
             return
         table = Table(title="Catalogs")
         table.add_column("Catalog")
@@ -659,8 +665,25 @@ def schema_show(
         schemas = search.list_schemas(parts[0])
         if schemas:
             if json:
-                sys.stdout.write(_json.dumps({"catalog": parts[0], "schemas": schemas}))
+                if recursive:
+                    # Include tables (and columns) for each schema
+                    result = {"catalog": parts[0], "schemas": {}}
+                    for s in schemas:
+                        tables = search.list_tables_in_schema(parts[0], s)
+                        if recursive:
+                            tables = [
+                                {**t, "columns": m["columns"]}
+                                for t in tables
+                                for m in search.lookup_tables(f"{t['catalog']}.{t['schema']}.{t['table']}")
+                            ]
+                        result["schemas"][s] = tables
+                    sys.stdout.write(_json.dumps(result))
+                else:
+                    sys.stdout.write(_json.dumps({"catalog": parts[0], "schemas": schemas}))
                 sys.stdout.write("\n")
+                return
+            if recursive:
+                _print_tree(console, search, [parts[0]])
                 return
             table = Table(title=f"Schemas in {parts[0]}")
             table.add_column("Schema")
@@ -686,8 +709,17 @@ def schema_show(
         tables = search.list_tables_in_schema(parts[0], parts[1])
         if tables:
             if json:
+                if recursive:
+                    tables = [
+                        {**t, "columns": m["columns"]}
+                        for t in tables
+                        for m in search.lookup_tables(f"{t['catalog']}.{t['schema']}.{t['table']}")
+                    ]
                 sys.stdout.write(_json.dumps(tables))
                 sys.stdout.write("\n")
+                return
+            if recursive:
+                _print_tree_schema(console, search, parts[0], parts[1])
                 return
             table = Table(title=f"Tables in {parts[0]}.{parts[1]}")
             table.add_column("Table")
@@ -709,7 +741,7 @@ def schema_show(
             _print_table_columns(console, m)
         return
 
-    # 3+ parts: catalog.schema.table
+    # 3+ parts: catalog.schema.table — recursive has no extra effect
     matches = search.lookup_tables(name)
     if not matches:
         typer.echo(f"Table not found: {name}", err=True)
@@ -732,6 +764,34 @@ def _print_table_columns(console, m: dict) -> None:
     for col in m["columns"]:
         table.add_row(col["name"], col["type"], str(col.get("nullable", "")))
     console.print(table)
+
+
+def _print_tree(console, search, catalogs: list[str]) -> None:
+    """Print a full catalog → schema → table → column tree."""
+    from rich.tree import Tree
+    root = Tree("[bold]Schema Cache[/bold]")
+    for cat in catalogs:
+        cat_branch = root.add(f"[bold]{cat}[/bold]")
+        for sch in search.list_schemas(cat):
+            sch_branch = cat_branch.add(sch)
+            for t in search.list_tables_in_schema(cat, sch):
+                tbl_branch = sch_branch.add(f"{t['table']}  [dim]{t['type']}[/dim]")
+                for m in search.lookup_tables(f"{cat}.{sch}.{t['table']}"):
+                    for col in m["columns"]:
+                        tbl_branch.add(f"{col['name']}  [dim]{col['type']}[/dim]")
+    console.print(root)
+
+
+def _print_tree_schema(console, search, catalog: str, schema: str) -> None:
+    """Print a table → column tree for a single schema."""
+    from rich.tree import Tree
+    root = Tree(f"[bold]{catalog}.{schema}[/bold]")
+    for t in search.list_tables_in_schema(catalog, schema):
+        tbl_branch = root.add(f"{t['table']}  [dim]{t['type']}[/dim]")
+        for m in search.lookup_tables(f"{catalog}.{schema}.{t['table']}"):
+            for col in m["columns"]:
+                tbl_branch.add(f"{col['name']}  [dim]{col['type']}[/dim]")
+    console.print(root)
 
 
 @schema_app.command("list")
