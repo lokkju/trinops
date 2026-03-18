@@ -7,17 +7,27 @@
 
 Trino query monitoring from the terminal. CLI commands for listing and inspecting queries, a live TUI dashboard, and a progress-tracking library for use in Python scripts.
 
+**[Documentation →](https://trino.ps)**
+
 <p align="center">
-  <img src="https://raw.githubusercontent.com/lokkju/trinops/main/docs/screenshots/query-list.svg" alt="trinops TUI dashboard" width="100%">
+  <img src="https://raw.githubusercontent.com/lokkju/trinops/main/docs/screenshots/hero.gif" alt="trinops TUI dashboard" width="100%">
 </p>
 
 ## Installation
+
+Try it without installing:
+
+```bash
+uvx trinops top
+```
+
+Or install permanently:
 
 ```bash
 pip install trinops
 ```
 
-The default install includes the CLI and TUI dashboard. For tqdm progress bars in library usage:
+For tqdm progress bars in library usage:
 
 ```bash
 pip install trinops[tqdm]
@@ -25,28 +35,25 @@ pip install trinops[tqdm]
 
 ## Quick Start
 
-Configure your Trino connection interactively or with flags:
+Point at a cluster and go:
 
 ```bash
-# Interactive prompts
-trinops config init
-
-# Non-interactive
-trinops config init --server trino.example.com:443 --user myuser --auth basic
+trinops top --server trino.example.com --user myuser
 ```
 
-Or pass the server directly:
+Or configure once and skip the flags:
 
 ```bash
-trinops queries --server trino.example.com
+trinops config init --server trino.example.com --user myuser --auth none --yes
+trinops top
 ```
 
-Or set environment variables:
+Environment variables work too:
 
 ```bash
 export TRINOPS_SERVER=trino.example.com
 export TRINOPS_USER=myuser
-export TRINOPS_AUTH=basic
+trinops top
 ```
 
 ## CLI Usage
@@ -191,7 +198,7 @@ trinops auth status
 trinops auth login
 ```
 
-For `basic` auth, trinops uses the system keyring to store passwords securely.
+For `basic` auth, use `password_cmd` to fetch credentials from a secret manager (e.g., `pass`, `1password-cli`) rather than storing passwords in the config file. For `oauth2`, install `keyring` to cache tokens across sessions.
 
 ## Library Usage
 
