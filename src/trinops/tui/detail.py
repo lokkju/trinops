@@ -41,7 +41,7 @@ class DetailPane(Container):
     DEFAULT_CSS = """
     DetailPane {
         height: 60%;
-        border-top: solid green;
+        border-top: solid $primary;
         display: none;
     }
     DetailPane.visible {

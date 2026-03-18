@@ -18,7 +18,7 @@ console = Console()
 
 def print_queries_table(queries: Sequence[QueryInfo]) -> None:
     table = Table()
-    table.add_column("Query ID", style="cyan")
+    table.add_column("Query ID", style="#7c3aed")
     table.add_column("State")
     table.add_column("User")
     table.add_column("Elapsed")
@@ -27,15 +27,15 @@ def print_queries_table(queries: Sequence[QueryInfo]) -> None:
     table.add_column("SQL")
 
     state_styles = {
-        "RUNNING": "bold blue",
-        "QUEUED": "yellow",
-        "PLANNING": "yellow",
-        "STARTING": "yellow",
-        "DISPATCHING": "yellow",
-        "WAITING_FOR_RESOURCES": "yellow",
-        "FINISHING": "blue",
-        "FINISHED": "green",
-        "FAILED": "bold red",
+        "RUNNING": "bold #dd00a1",
+        "QUEUED": "#eab308",
+        "PLANNING": "#eab308",
+        "STARTING": "#eab308",
+        "DISPATCHING": "#eab308",
+        "WAITING_FOR_RESOURCES": "#eab308",
+        "FINISHING": "#a78bfa",
+        "FINISHED": "#22c55e",
+        "FAILED": "bold #ef4444",
     }
 
     for q in queries:
@@ -86,15 +86,15 @@ def print_query_json(q: QueryInfo) -> None:
 
 
 _STATE_STYLES = {
-    "RUNNING": "bold blue",
-    "QUEUED": "yellow",
-    "PLANNING": "yellow",
-    "STARTING": "yellow",
-    "DISPATCHING": "yellow",
-    "WAITING_FOR_RESOURCES": "yellow",
-    "FINISHING": "blue",
-    "FINISHED": "green",
-    "FAILED": "bold red",
+    "RUNNING": "bold #dd00a1",
+    "QUEUED": "#eab308",
+    "PLANNING": "#eab308",
+    "STARTING": "#eab308",
+    "DISPATCHING": "#eab308",
+    "WAITING_FOR_RESOURCES": "#eab308",
+    "FINISHING": "#a78bfa",
+    "FINISHED": "#22c55e",
+    "FAILED": "bold #ef4444",
 }
 
 

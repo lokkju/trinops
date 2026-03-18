@@ -258,7 +258,7 @@ async def capture_all() -> None:
 
     # 1. Query list (default view with sort caret)
     app = MockTrinopsApp(profile=profile, interval=30.0)
-    async with app.run_test(size=(140, 32)) as pilot:
+    async with app.run_test(size=(140, 42)) as pilot:
         await pilot.pause()
         app.save_screenshot(f"{OUTPUT_DIR}/query-list.svg")
 
@@ -305,7 +305,7 @@ async def capture_all() -> None:
 
     # 6. Kill confirmation dialog
     app = MockTrinopsApp(profile=profile, interval=30.0)
-    async with app.run_test(size=(140, 32)) as pilot:
+    async with app.run_test(size=(140, 42)) as pilot:
         await pilot.pause()
         await pilot.press("k")  # Trigger kill dialog on first row
         await pilot.pause()
@@ -314,23 +314,23 @@ async def capture_all() -> None:
     # 7. Empty state
     app = MockTrinopsApp(profile=profile, interval=30.0)
     app._mock_empty = True
-    async with app.run_test(size=(140, 32)) as pilot:
+    async with app.run_test(size=(140, 42)) as pilot:
         await pilot.pause()
         app.save_screenshot(f"{OUTPUT_DIR}/empty-state.svg")
 
     # Hero PNG (for OG image / social cards)
     svg_to_png(f"{OUTPUT_DIR}/query-list.svg", f"{OUTPUT_DIR}/hero.png")
 
-    # Hero GIF — sequence: load → detail → tabs → sort (matches spec)
+    # Hero GIF — sequence: list → detail → tabs → back to list
     gif_frames = [
-        f"{OUTPUT_DIR}/query-list.svg",       # load
-        f"{OUTPUT_DIR}/detail-overview.svg",   # detail
-        f"{OUTPUT_DIR}/detail-stats.svg",      # tabs (Stats)
-        f"{OUTPUT_DIR}/detail-tables.svg",     # tabs (Tables)
-        f"{OUTPUT_DIR}/query-list.svg",        # back to list (sort visible)
+        f"{OUTPUT_DIR}/query-list.svg",
+        f"{OUTPUT_DIR}/detail-overview.svg",
+        f"{OUTPUT_DIR}/detail-stats.svg",
+        f"{OUTPUT_DIR}/detail-tables.svg",
+        f"{OUTPUT_DIR}/query-list.svg",
     ]
-    # Convert each frame to a temp PNG in an isolated temp directory
     import tempfile
+    import shutil
     tmpdir = tempfile.mkdtemp(prefix="trinops-hero-")
     temp_pngs = []
     for i, svg in enumerate(gif_frames):
@@ -338,7 +338,6 @@ async def capture_all() -> None:
         svg_to_png(svg, tmp, scale=1.5)
         temp_pngs.append(tmp)
     assemble_gif(temp_pngs, f"{OUTPUT_DIR}/hero.gif", duration_ms=2000)
-    import shutil
     shutil.rmtree(tmpdir)
 
 

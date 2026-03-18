@@ -7,9 +7,25 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.reactive import reactive
 from textual.screen import ModalScreen
+from textual.theme import Theme
 from textual.widgets import Button, DataTable, Footer, Header, Label, Static
 from textual.timer import Timer
 from textual.worker import Worker, WorkerState
+
+TRINOPS_THEME = Theme(
+    name="trinops",
+    primary="#dd00a1",
+    secondary="#7c3aed",
+    accent="#a78bfa",
+    warning="#eab308",
+    error="#ef4444",
+    success="#22c55e",
+    foreground="#e8e9f0",
+    background="#131428",
+    surface="#1d1f3e",
+    panel="#181a36",
+    dark=True,
+)
 
 from trinops.client import TrinopsClient
 from trinops.config import ConnectionProfile
@@ -117,6 +133,7 @@ class StatusBar(Static):
 
 class TrinopsApp(App):
     TITLE = "trinops"
+    theme = "trinops"
 
     CSS = """
     #query-table {
@@ -155,6 +172,7 @@ class TrinopsApp(App):
 
     def __init__(self, profile: ConnectionProfile, interval: float = 1.0, **kwargs):
         super().__init__(**kwargs)
+        self.register_theme(TRINOPS_THEME)
         self._profile = profile
         self._interval = interval
         self._client: TrinopsClient | None = None
