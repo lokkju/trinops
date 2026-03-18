@@ -308,25 +308,39 @@ trinops schema search "*event*" --json
 
 ## schema show
 
-Show columns for a specific table.
+Browse the schema hierarchy or show columns for a specific table.
 
 ```
-trinops schema show TABLE_NAME [OPTIONS]
+trinops schema show [NAME] [OPTIONS]
 ```
 
-The table name can be unqualified (`users`), schema-qualified (`analytics.users`), or fully qualified (`hive.analytics.users`).
+The name determines the level of detail: no argument lists catalogs, one part lists schemas in a catalog, two parts (`catalog.schema`) lists tables, three parts (`catalog.schema.table`) shows columns. An unqualified name is matched as a table across all catalogs.
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--profile` | *(default)* | Config profile name |
+| `--catalog` | *(all)* | Limit to a specific catalog (for full dump) |
+| `--recursive` / `-r` | `false` | Expand the full tree below the current level |
 | `--json` | `false` | JSON output |
 
 **Examples:**
 
 ```bash
+# Browse hierarchy
+trinops schema show
+trinops schema show hive
+trinops schema show hive.analytics
+
+# Show table columns
 trinops schema show users
 trinops schema show hive.analytics.page_views
-trinops schema show orders --json
+
+# Recursive tree
+trinops schema show hive --recursive
+
+# JSON dump
+trinops schema show --json
+trinops schema show hive.analytics --json --recursive
 ```
 
 ---

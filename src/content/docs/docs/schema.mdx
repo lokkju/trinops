@@ -53,17 +53,40 @@ Column search results include the catalog, schema, table, column name, and data 
 trinops schema search "*event*" --catalog iceberg
 ```
 
-### Show table details
+### Browse the schema hierarchy
 
-Look up a specific table to see its columns:
+`schema show` doubles as a hierarchy browser. The argument determines the level of detail:
 
 ```bash
-trinops schema show users
-trinops schema show analytics.page_views
+# List all cached catalogs
+trinops schema show
+
+# List schemas in a catalog
+trinops schema show hive
+
+# List tables in a schema
+trinops schema show hive.analytics
+
+# Show columns for a table
 trinops schema show hive.analytics.page_views
 ```
 
-The argument can be an unqualified table name, `schema.table`, or the fully qualified `catalog.schema.table`. If the name is ambiguous, all matching tables are shown.
+An unqualified name like `users` is matched as a table name across all catalogs. If it matches a catalog name instead, the catalog's schemas are shown.
+
+### Recursive expansion
+
+Add `--recursive` (or `-r`) to expand everything below the current level into a tree:
+
+```bash
+# Full tree: all catalogs → schemas → tables → columns
+trinops schema show --recursive
+
+# Everything in one catalog
+trinops schema show hive --recursive
+
+# All tables with columns in a schema
+trinops schema show hive.analytics --recursive
+```
 
 ### List cached catalogs
 
@@ -80,6 +103,19 @@ Every search and show command supports `--json` for machine-readable output:
 ```bash
 trinops schema search "*order*" --json
 trinops schema show orders --json
+```
+
+Combine `--json` with `--recursive` to get the full nested structure:
+
+```bash
+# Dump the entire cache as JSON
+trinops schema show --json
+
+# All tables and columns in a catalog
+trinops schema show hive --json --recursive
+
+# All tables with columns in a schema
+trinops schema show hive.analytics --json --recursive
 ```
 
 ### Scripting with jq
@@ -102,7 +138,7 @@ trinops schema show page_views --json | \
 |---------|-------------|
 | `schema refresh` | Fetch metadata from Trino and cache locally |
 | `schema search <pattern>` | Search cached table or column names using glob patterns |
-| `schema show <table>` | Show columns for a specific table |
+| `schema show [name]` | Browse hierarchy or show table columns; `--recursive` to expand |
 | `schema list` | List all cached catalogs |
 
 See the [CLI Reference](/docs/cli/) for the full set of flags on each command.
