@@ -108,11 +108,19 @@ trinops schema search "order*"
 # Search for columns
 trinops schema search --columns "customer_id"
 
-# Show table details
+# Browse the hierarchy
+trinops schema show              # list catalogs
+trinops schema show tpch         # list schemas
+trinops schema show tpch.sf1     # list tables
+
+# Show table columns
 trinops schema show tpch.sf1.lineitem
 
-# List cached catalogs
-trinops schema list
+# Expand a full tree
+trinops schema show tpch --recursive
+
+# Dump everything as JSON
+trinops schema show --json
 ```
 
 All schema commands support `--json` output and `--profile` for multi-cluster setups.
