@@ -281,12 +281,33 @@ def top(
     tui(server=server, profile=profile, user=user, auth=auth, interval=interval)
 
 
-config_app = typer.Typer(name="config", help="Manage trinops configuration")
-auth_app = typer.Typer(name="auth", help="Manage authentication")
-schema_app = typer.Typer(name="schema", help="Manage cached schema metadata")
+config_app = typer.Typer(name="config", help="Manage trinops configuration", invoke_without_command=True)
+auth_app = typer.Typer(name="auth", help="Manage authentication", invoke_without_command=True)
+schema_app = typer.Typer(name="schema", help="Manage cached schema metadata", invoke_without_command=True)
 app.add_typer(config_app, name="config")
 app.add_typer(auth_app, name="auth")
 app.add_typer(schema_app, name="schema")
+
+
+@config_app.callback()
+def config_callback(ctx: typer.Context):
+    """Manage trinops configuration."""
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+
+
+@auth_app.callback()
+def auth_callback(ctx: typer.Context):
+    """Manage authentication."""
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+
+
+@schema_app.callback()
+def schema_callback(ctx: typer.Context):
+    """Manage cached schema metadata."""
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
 
 
 @config_app.command("show")
@@ -590,11 +611,18 @@ def schema_search(
 
 @schema_app.command("show")
 def schema_show(
-    table_name: str = typer.Argument(help="Table name (unqualified, schema.table, or catalog.schema.table)"),
+    name: Optional[str] = typer.Argument(None, help="Name to browse: catalog, catalog.schema, catalog.schema.table, or table"),
     profile: Optional[str] = typer.Option(None, help="Config profile name"),
+    catalog: Optional[str] = typer.Option(None, "--catalog", help="Limit to catalog (for full dump)"),
     json: bool = typer.Option(False, "--json", help="JSON output"),
 ):
-    """Show columns for a specific table."""
+    """Browse schema hierarchy or show table columns.
+
+    No argument: list catalogs (or dump all with --json).
+    One part: list schemas in that catalog.
+    Two parts: list tables in catalog.schema.
+    Three parts (or unqualified table name): show columns.
+    """
     from rich.console import Console
     from rich.table import Table
 
@@ -603,28 +631,107 @@ def schema_show(
 
     profile_name = profile or "default"
     cache = SchemaCache()
-    search = SchemaSearch(cache, profile=profile_name)
-    matches = search.lookup_tables(table_name)
+    search = SchemaSearch(cache, profile=profile_name, catalog=catalog)
+    console = Console()
 
+    if name is None:
+        # No argument: list catalogs, or dump everything with --json
+        if json:
+            sys.stdout.write(_json.dumps(search.dump_all()))
+            sys.stdout.write("\n")
+            return
+        catalogs = search.list_catalogs()
+        if not catalogs:
+            typer.echo("No cached catalogs found.")
+            return
+        table = Table(title="Catalogs")
+        table.add_column("Catalog")
+        for c in catalogs:
+            table.add_row(c)
+        console.print(table)
+        return
+
+    parts = name.split(".")
+
+    if len(parts) == 1:
+        # Could be a catalog name or an unqualified table name.
+        # Try catalog first.
+        schemas = search.list_schemas(parts[0])
+        if schemas:
+            if json:
+                sys.stdout.write(_json.dumps({"catalog": parts[0], "schemas": schemas}))
+                sys.stdout.write("\n")
+                return
+            table = Table(title=f"Schemas in {parts[0]}")
+            table.add_column("Schema")
+            for s in schemas:
+                table.add_row(s)
+            console.print(table)
+            return
+        # Fall through to table lookup
+        matches = search.lookup_tables(name)
+        if not matches:
+            typer.echo(f"No catalog or table found: {name}", err=True)
+            raise typer.Exit(1)
+        if json:
+            sys.stdout.write(_json.dumps(matches))
+            sys.stdout.write("\n")
+            return
+        for m in matches:
+            _print_table_columns(console, m)
+        return
+
+    if len(parts) == 2:
+        # catalog.schema → list tables
+        tables = search.list_tables_in_schema(parts[0], parts[1])
+        if tables:
+            if json:
+                sys.stdout.write(_json.dumps(tables))
+                sys.stdout.write("\n")
+                return
+            table = Table(title=f"Tables in {parts[0]}.{parts[1]}")
+            table.add_column("Table")
+            table.add_column("Type")
+            for t in tables:
+                table.add_row(t["table"], t["type"])
+            console.print(table)
+            return
+        # Fall through to schema.table lookup
+        matches = search.lookup_tables(name)
+        if not matches:
+            typer.echo(f"Not found: {name}", err=True)
+            raise typer.Exit(1)
+        if json:
+            sys.stdout.write(_json.dumps(matches))
+            sys.stdout.write("\n")
+            return
+        for m in matches:
+            _print_table_columns(console, m)
+        return
+
+    # 3+ parts: catalog.schema.table
+    matches = search.lookup_tables(name)
     if not matches:
-        typer.echo(f"Table not found: {table_name}", err=True)
+        typer.echo(f"Table not found: {name}", err=True)
         raise typer.Exit(1)
-
     if json:
         sys.stdout.write(_json.dumps(matches))
         sys.stdout.write("\n")
         return
-
-    console = Console()
     for m in matches:
-        fqn = f"{m['catalog']}.{m['schema']}.{m['table']}"
-        table = Table(title=fqn)
-        table.add_column("Column")
-        table.add_column("Type")
-        table.add_column("Nullable")
-        for col in m["columns"]:
-            table.add_row(col["name"], col["type"], str(col.get("nullable", "")))
-        console.print(table)
+        _print_table_columns(console, m)
+
+
+def _print_table_columns(console, m: dict) -> None:
+    from rich.table import Table
+    fqn = f"{m['catalog']}.{m['schema']}.{m['table']}"
+    table = Table(title=fqn)
+    table.add_column("Column")
+    table.add_column("Type")
+    table.add_column("Nullable")
+    for col in m["columns"]:
+        table.add_row(col["name"], col["type"], str(col.get("nullable", "")))
+    console.print(table)
 
 
 @schema_app.command("list")

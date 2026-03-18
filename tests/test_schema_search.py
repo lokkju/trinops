@@ -127,3 +127,70 @@ def test_search_unqualified_show(tmp_path):
     assert results[0]["catalog"] == "tpch"
     assert results[0]["schema"] == "sf1"
     assert len(results[0]["columns"]) == 2
+
+
+def test_list_catalogs(tmp_path):
+    from trinops.schema.cache import SchemaCache
+    from trinops.schema.search import SchemaSearch
+    cache = SchemaCache(base_dir=tmp_path)
+    cache.write("default", "tpch", SAMPLE_CACHE)
+    cache.write("default", "hive", MULTI_CATALOG_CACHE)
+    search = SchemaSearch(cache, profile="default")
+    catalogs = search.list_catalogs()
+    assert catalogs == ["hive", "tpch"]
+
+
+def test_list_schemas(tmp_path):
+    from trinops.schema.cache import SchemaCache
+    from trinops.schema.search import SchemaSearch
+    cache = SchemaCache(base_dir=tmp_path)
+    cache.write("default", "tpch", SAMPLE_CACHE)
+    search = SchemaSearch(cache, profile="default")
+    schemas = search.list_schemas("tpch")
+    assert schemas == ["sf1"]
+
+
+def test_list_schemas_unknown_catalog(tmp_path):
+    from trinops.schema.cache import SchemaCache
+    from trinops.schema.search import SchemaSearch
+    cache = SchemaCache(base_dir=tmp_path)
+    cache.write("default", "tpch", SAMPLE_CACHE)
+    search = SchemaSearch(cache, profile="default")
+    assert search.list_schemas("nonexistent") == []
+
+
+def test_list_tables_in_schema(tmp_path):
+    from trinops.schema.cache import SchemaCache
+    from trinops.schema.search import SchemaSearch
+    cache = SchemaCache(base_dir=tmp_path)
+    cache.write("default", "tpch", SAMPLE_CACHE)
+    search = SchemaSearch(cache, profile="default")
+    tables = search.list_tables_in_schema("tpch", "sf1")
+    assert len(tables) == 2
+    names = {t["table"] for t in tables}
+    assert names == {"lineitem", "nation"}
+    assert all("columns" not in t for t in tables)
+
+
+def test_dump_all(tmp_path):
+    from trinops.schema.cache import SchemaCache
+    from trinops.schema.search import SchemaSearch
+    cache = SchemaCache(base_dir=tmp_path)
+    cache.write("default", "tpch", SAMPLE_CACHE)
+    cache.write("default", "hive", MULTI_CATALOG_CACHE)
+    search = SchemaSearch(cache, profile="default")
+    dump = search.dump_all()
+    assert len(dump) == 4  # 2 tpch + 2 hive
+    assert all("columns" in d for d in dump)
+
+
+def test_dump_all_with_catalog_filter(tmp_path):
+    from trinops.schema.cache import SchemaCache
+    from trinops.schema.search import SchemaSearch
+    cache = SchemaCache(base_dir=tmp_path)
+    cache.write("default", "tpch", SAMPLE_CACHE)
+    cache.write("default", "hive", MULTI_CATALOG_CACHE)
+    search = SchemaSearch(cache, profile="default", catalog="tpch")
+    dump = search.dump_all()
+    assert len(dump) == 2
+    assert all(d["catalog"] == "tpch" for d in dump)

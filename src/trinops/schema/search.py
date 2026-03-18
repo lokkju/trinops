@@ -129,3 +129,37 @@ class SchemaSearch:
                     }
                 )
         return results
+
+    def list_catalogs(self) -> list[str]:
+        """Return sorted unique catalog names in the loaded entries."""
+        return sorted({e["catalog"] for e in self._entries})
+
+    def list_schemas(self, catalog: str) -> list[str]:
+        """Return sorted unique schema names within a catalog."""
+        return sorted({e["schema"] for e in self._entries if e["catalog"] == catalog})
+
+    def list_tables_in_schema(self, catalog: str, schema: str) -> list[dict]:
+        """Return tables within a specific catalog.schema."""
+        return [
+            {
+                "catalog": e["catalog"],
+                "schema": e["schema"],
+                "table": e["table"],
+                "type": e["type"],
+            }
+            for e in self._entries
+            if e["catalog"] == catalog and e["schema"] == schema
+        ]
+
+    def dump_all(self) -> list[dict]:
+        """Return all entries with full column data for JSON dump."""
+        return [
+            {
+                "catalog": e["catalog"],
+                "schema": e["schema"],
+                "table": e["table"],
+                "type": e["type"],
+                "columns": e["columns"],
+            }
+            for e in self._entries
+        ]
