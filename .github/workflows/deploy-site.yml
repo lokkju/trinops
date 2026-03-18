@@ -1,33 +1,21 @@
 name: Deploy Website
-
 on:
   push:
-    branches:
-      - website
-
+    branches: [website]
 permissions:
   contents: read
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: pip install -r requirements-site.txt
-
-      - name: Build site
-        run: mkdocs build --strict
-
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+          node-version: '22'
+      - run: npm ci
+      - run: npm run build
+      - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site --project-name=trino-ps
+          command: pages deploy dist --project-name=trino-ps

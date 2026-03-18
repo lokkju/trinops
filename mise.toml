@@ -1,18 +1,14 @@
 [tools]
-uv = "latest"
+node = "22.16.0"
+
+[tasks.dev]
+description = "Start Astro dev server"
+run = "npm run dev"
 
 [tasks.build]
-description = "Build the MkDocs site"
-run = "uv tool run --with mkdocs-material mkdocs build --strict"
+description = "Build the site"
+run = "npm run build"
 
-[tasks.serve]
-description = "Start local MkDocs dev server"
-run = "uv tool run --with mkdocs-material mkdocs serve"
-
-[tasks.clean]
-description = "Remove build output"
-run = "rm -rf site/"
-
-[tasks.rebuild]
-description = "Clean and rebuild"
-depends = ["clean", "build"]
+[tasks.preview]
+description = "Preview the built site"
+run = "npm run preview"

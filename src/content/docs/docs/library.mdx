@@ -1,0 +1,185 @@
+---
+title: Python Library
+---
+
+trinops includes `TrinoProgress`, a library for adding real-time progress monitoring to Python scripts that run queries through the [trino-python-client](https://github.com/trinodb/trino-python-client). It polls query statistics in a background thread and renders progress to one or more display backends.
+
+## Cursor mode
+
+Wrap a trino cursor with `TrinoProgress` and use it as a drop-in replacement. The progress display starts automatically when you call `execute()` and stops when the context manager exits.
+
+```python
+import trino
+from trinops.progress import TrinoProgress
+
+conn = trino.dbapi.connect(host="trino.example.com", port=443, user="alice")
+cursor = conn.cursor()
+
+with TrinoProgress(cursor) as progress:
+    progress.execute("SELECT * FROM hive.analytics.events WHERE ds = '2024-03-15'")
+    rows = progress.fetchall()
+
+print(f"Got {len(rows)} rows")
+```
+
+`TrinoProgress` proxies `fetchone()`, `fetchall()`, `fetchmany()`, `description`, and iteration, so you can use it anywhere you would use a cursor.
+
+## Standalone mode
+
+If you already have a query running and just want to monitor it, pass a connection and a query ID:
+
+```python
+import trino
+from trinops.progress import TrinoProgress
+
+conn = trino.dbapi.connect(host="trino.example.com", port=443, user="alice")
+
+with TrinoProgress(conn, query_id="20240315_123456_00001_abcde") as progress:
+    progress.start()
+    progress.wait()
+
+stats = progress.last_stats
+print(f"Final state: {stats.state}, rows: {stats.processed_rows}")
+```
+
+:::note
+Standalone mode uses the Trino `/v1/query/{id}` REST endpoint, which is not a stable API. Cursor mode is preferred when possible because it reads stats directly from the cursor object.
+:::
+
+## Display backends
+
+The `display` parameter controls where progress is rendered. It accepts a string name, a list of names, or a `Display` instance.
+
+| Name | Description |
+|------|-------------|
+| `"auto"` | Uses tqdm if installed, falls back to stderr. This is the default. |
+| `"stderr"` | Single-line progress written to stderr with carriage returns. |
+| `"tqdm"` | tqdm progress bar. Requires `pip install trinops[tqdm]`. |
+| `"web"` | Starts a local HTTP server with a live-updating dashboard. |
+
+### stderr
+
+The simplest backend. Prints a single updating line to stderr showing state, splits, rows, bytes, elapsed time, and CPU time:
+
+```python
+with TrinoProgress(cursor, display="stderr") as progress:
+    progress.execute("SELECT count(*) FROM large_table")
+    progress.fetchall()
+```
+
+### tqdm
+
+Renders a tqdm progress bar tracking split completion, with rows, CPU time, and memory as postfix stats:
+
+```python
+with TrinoProgress(cursor, display="tqdm") as progress:
+    progress.execute("SELECT count(*) FROM large_table")
+    progress.fetchall()
+```
+
+Install the tqdm extra: `pip install trinops[tqdm]`.
+
+### web
+
+Starts a local HTTP server that serves a live-updating HTML dashboard. The URL is printed to stderr on startup:
+
+```python
+with TrinoProgress(cursor, display="web", web_port=8000) as progress:
+    progress.execute("SELECT count(*) FROM large_table")
+    progress.fetchall()
+```
+
+Set `web_port=0` (the default) to let the OS pick an available port. The dashboard shows state, a progress bar, split/row/byte/time statistics, and a stage-by-stage breakdown.
+
+### Multiple displays
+
+Pass a list to render to several backends simultaneously:
+
+```python
+with TrinoProgress(cursor, display=["stderr", "web"]) as progress:
+    progress.execute("SELECT count(*) FROM large_table")
+    progress.fetchall()
+```
+
+## Constructor parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `cursor_or_connection` | cursor or connection | *(required)* | A trino cursor (cursor mode) or connection (standalone mode) |
+| `query_id` | `str \| None` | `None` | Query ID for standalone mode |
+| `display` | `str \| list \| Display` | `"auto"` | Display backend(s) |
+| `interval` | `float` | `1.0` | Polling interval in seconds |
+| `max_failures` | `int` | `5` | Max consecutive poll failures before stopping (standalone mode) |
+| `web_port` | `int` | `0` | Port for the web display; `0` for auto-assign |
+
+## QueryStats
+
+Each poll produces a `QueryStats` dataclass with these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | `str` | Query state (QUEUED, PLANNING, STARTING, RUNNING, FINISHING, FINISHED, FAILED) |
+| `queued` | `bool` | Whether the query is queued |
+| `scheduled` | `bool` | Whether the query is scheduled |
+| `nodes` | `int` | Number of worker nodes |
+| `total_splits` | `int` | Total number of splits |
+| `queued_splits` | `int` | Splits waiting to run |
+| `running_splits` | `int` | Splits currently executing |
+| `completed_splits` | `int` | Splits finished |
+| `cpu_time_millis` | `int` | Cumulative CPU time |
+| `wall_time_millis` | `int` | Cumulative wall time |
+| `queued_time_millis` | `int` | Time spent queued |
+| `elapsed_time_millis` | `int` | Wall-clock elapsed time |
+| `processed_rows` | `int` | Rows processed |
+| `processed_bytes` | `int` | Bytes processed |
+| `physical_input_bytes` | `int` | Physical bytes read |
+| `peak_memory_bytes` | `int` | Peak memory usage |
+| `spilled_bytes` | `int` | Bytes spilled to disk |
+| `progress_percentage` | `float \| None` | Overall progress percentage |
+| `root_stage` | `StageStats \| None` | Root of the stage tree |
+| `error` | `dict \| None` | Error details for failed queries |
+
+The `is_terminal` property returns `True` when the state is `FINISHED` or `FAILED`.
+
+## StageStats
+
+Each stage in the query plan is represented as a `StageStats` dataclass:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stage_id` | `str` | Stage identifier |
+| `state` | `str` | Stage state |
+| `done` | `bool` | Whether the stage is complete |
+| `nodes` | `int` | Number of nodes running this stage |
+| `total_splits` | `int` | Total splits in this stage |
+| `queued_splits` | `int` | Queued splits |
+| `running_splits` | `int` | Running splits |
+| `completed_splits` | `int` | Completed splits |
+| `cpu_time_millis` | `int` | CPU time for this stage |
+| `wall_time_millis` | `int` | Wall time for this stage |
+| `processed_rows` | `int` | Rows processed by this stage |
+| `processed_bytes` | `int` | Bytes processed by this stage |
+| `failed_tasks` | `int` | Number of failed tasks |
+| `sub_stages` | `tuple[StageStats, ...]` | Child stages |
+
+## Custom display backends
+
+Implement the `Display` protocol to build your own backend:
+
+```python
+from trinops.progress.display import Display
+from trinops.progress.stats import QueryStats
+
+class MyDisplay:
+    def on_stats(self, stats: QueryStats) -> None:
+        print(f"{stats.state}: {stats.completed_splits}/{stats.total_splits} splits")
+
+    def close(self) -> None:
+        pass
+
+with TrinoProgress(cursor, display=MyDisplay()) as progress:
+    progress.execute("SELECT count(*) FROM large_table")
+    progress.fetchall()
+```
+
+The `Display` protocol requires two methods: `on_stats(stats: QueryStats) -> None` called on each poll, and `close() -> None` called when monitoring ends.

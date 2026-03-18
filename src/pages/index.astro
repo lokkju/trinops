@@ -1,0 +1,795 @@
+---
+// Landing page — standalone Astro page, not a Starlight docs page
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="trinops — Trino query monitoring from the terminal." />
+  <title>trino.ps — Trino query monitoring</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg:       #131428;
+      --bg-card:  #1d1f3e;
+      --bg-alt:   #181a36;
+      --magenta:  #dd00a1;
+      --purple:   #7c3aed;
+      --purple-light: #a78bfa;
+      --text:     #e8e9f0;
+      --text-dim: #9096b8;
+      --border:   #2e3260;
+      --mono:     'JetBrains Mono', 'Fira Code', monospace;
+      --sans:     'Inter', system-ui, sans-serif;
+    }
+
+    html {
+      scroll-snap-type: y mandatory;
+      overflow-y: scroll;
+      scroll-behavior: smooth;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+    }
+
+    body {
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .site-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0 2rem;
+      height: 56px;
+      background: rgba(19, 20, 40, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      color: var(--magenta);
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -0.02em;
+      flex-shrink: 0;
+    }
+
+    .header-brand svg {
+      width: 22px;
+      height: 22px;
+      fill: var(--magenta);
+    }
+
+    .header-nav {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .header-nav a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.9rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .header-nav a:hover {
+      color: var(--text);
+      background: var(--bg-card);
+    }
+
+    .header-nav a.active {
+      color: var(--magenta);
+    }
+
+    .header-spacer {
+      flex: 1;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .header-actions a {
+      color: var(--text-dim);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.875rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      transition: color 0.15s;
+    }
+
+    .header-actions a:hover {
+      color: var(--text);
+    }
+
+    .header-actions svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    /* ── Sections ── */
+    .snap-section {
+      scroll-snap-align: start;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 5rem 2rem 3rem;
+      position: relative;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(124, 58, 237, 0.18) 0%, transparent 70%),
+                  var(--bg);
+      text-align: center;
+    }
+
+    .hero-eyebrow {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--magenta);
+      background: rgba(221, 0, 161, 0.1);
+      border: 1px solid rgba(221, 0, 161, 0.25);
+      border-radius: 100px;
+      padding: 0.25rem 0.85rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-title {
+      font-size: clamp(3rem, 8vw, 6.5rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #ffffff 30%, var(--magenta) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-tagline {
+      font-size: clamp(1rem, 2.5vw, 1.35rem);
+      color: var(--text-dim);
+      margin-bottom: 2.5rem;
+      max-width: 480px;
+      line-height: 1.5;
+    }
+
+    .hero-screenshot {
+      width: 100%;
+      max-width: 820px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(124, 58, 237, 0.15);
+      margin-bottom: 2.5rem;
+      overflow: hidden;
+    }
+
+    .hero-screenshot img {
+      width: 100%;
+      display: block;
+    }
+
+    /* ── Install tabs ── */
+    .install-tabs {
+      width: 100%;
+      max-width: 520px;
+      margin-bottom: 2.5rem;
+    }
+
+    .tab-buttons {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0;
+    }
+
+    .tab-btn {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 0.6rem 1.2rem;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      margin-bottom: -1px;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+    }
+
+    .tab-btn.active {
+      color: var(--magenta);
+      border-bottom-color: var(--magenta);
+    }
+
+    .tab-panels {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+    }
+
+    .tab-panel {
+      display: none;
+      padding: 1rem 1.25rem;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .tab-panel pre {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text);
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .tab-panel .cmd-prefix {
+      color: var(--text-dim);
+      user-select: none;
+    }
+
+    /* ── CTA buttons ── */
+    .cta-buttons {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.65rem 1.5rem;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--magenta);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(221, 0, 161, 0.4);
+    }
+
+    .btn-primary:hover {
+      background: #f020b8;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 28px rgba(221, 0, 161, 0.55);
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-alt);
+      border-color: var(--purple);
+      transform: translateY(-1px);
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+      flex-shrink: 0;
+    }
+
+    /* ── Features ── */
+    .features {
+      background: var(--bg-alt);
+    }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--magenta);
+      margin-bottom: 0.75rem;
+    }
+
+    .section-title {
+      font-size: clamp(1.6rem, 3.5vw, 2.5rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 1rem;
+      color: var(--text);
+    }
+
+    .section-subtitle {
+      font-size: 1rem;
+      color: var(--text-dim);
+      max-width: 520px;
+      line-height: 1.6;
+      margin-bottom: 3rem;
+      text-align: center;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: var(--purple);
+      transform: translateY(-2px);
+    }
+
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      background: rgba(124, 58, 237, 0.12);
+      border: 1px solid rgba(124, 58, 237, 0.25);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .feature-icon svg {
+      width: 22px;
+      height: 22px;
+      fill: var(--purple-light);
+    }
+
+    .feature-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.6rem;
+      letter-spacing: -0.01em;
+    }
+
+    .feature-desc {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+      line-height: 1.65;
+    }
+
+    /* ── Screenshots ── */
+    .screenshots {
+      background: var(--bg);
+    }
+
+    .screenshots-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.25rem;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .screenshot-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .screenshot-item:hover {
+      border-color: var(--purple);
+    }
+
+    .screenshot-item img {
+      width: 100%;
+      display: block;
+    }
+
+    .screenshot-caption {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      padding: 0.6rem 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Quick start ── */
+    .quickstart {
+      background: var(--bg-alt);
+    }
+
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      width: 100%;
+      max-width: 640px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 1.25rem;
+      align-items: start;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+    }
+
+    .step-number {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(221, 0, 161, 0.12);
+      border: 1px solid rgba(221, 0, 161, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--magenta);
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.4rem;
+    }
+
+    .step-desc {
+      font-size: 0.875rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+      margin-bottom: 0.75rem;
+    }
+
+    .step-code {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 0.85rem;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .step-code .cmd-prefix {
+      color: var(--text-dim);
+      user-select: none;
+    }
+
+    /* ── Footer ── */
+    .site-footer {
+      scroll-snap-align: start;
+      min-height: auto;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.25rem;
+      text-align: center;
+    }
+
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--magenta);
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .footer-brand svg {
+      width: 18px;
+      height: 18px;
+      fill: var(--magenta);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .footer-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: color 0.15s;
+    }
+
+    .footer-links a:hover {
+      color: var(--text);
+    }
+
+    .footer-copy {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .screenshots-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .site-header {
+        padding: 0 1rem;
+      }
+
+      .snap-section {
+        padding: 5rem 1rem 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="site-header">
+    <a href="/" class="header-brand">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M4 12V9C4 11.2 7.6 13 12 13S20 11.2 20 9V12C20 12.5 19.8 12.9 19.5 13.4C18.7 13.1 17.9 13 17 13C14.5 13 12.1 14.1 10.6 15.9C6.8 15.6 4 14 4 12M12 11C16.4 11 20 9.2 20 7S16.4 3 12 3 4 4.8 4 7 7.6 11 12 11M9.1 19.7L8.8 19L9.1 18.3C9.2 18.1 9.3 18 9.3 17.8C6.2 17.2 4 15.8 4 14V17C4 18.8 6.4 20.3 9.7 20.8C9.5 20.5 9.3 20.1 9.1 19.7M17 18C16.4 18 16 18.4 16 19S16.4 20 17 20 18 19.6 18 19 17.6 18 17 18M23 19C22.1 21.3 19.7 23 17 23S11.9 21.3 11 19C11.9 16.7 14.3 15 17 15S22.1 16.7 23 19M19.5 19C19.5 17.6 18.4 16.5 17 16.5S14.5 17.6 14.5 19 15.6 21.5 17 21.5 19.5 20.4 19.5 19Z" />
+      </svg>
+      trino.ps
+    </a>
+    <nav class="header-nav">
+      <a href="/" class="active">Home</a>
+      <a href="/docs/getting-started/">Docs</a>
+    </nav>
+    <div class="header-spacer"></div>
+    <div class="header-actions">
+      <a href="https://github.com/lokkju/trinops" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-label="GitHub">
+          <path d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.865 8.184 6.839 9.504.5.092.682-.217.682-.483 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.021C22 6.484 17.522 2 12 2z" />
+        </svg>
+        GitHub
+      </a>
+    </div>
+  </header>
+
+  <!-- Hero section -->
+  <section class="snap-section hero">
+    <span class="hero-eyebrow">trinops</span>
+    <h1 class="hero-title">trino.ps</h1>
+    <p class="hero-tagline">Trino query monitoring from the terminal.</p>
+
+    <div class="hero-screenshot">
+      <img src="/hero.gif" alt="trinops TUI dashboard showing live Trino query monitoring" />
+    </div>
+
+    <div class="install-tabs">
+      <div class="tab-buttons">
+        <button class="tab-btn active" data-tab="uvx">uvx</button>
+        <button class="tab-btn" data-tab="pipx">pipx</button>
+        <button class="tab-btn" data-tab="pip">pip</button>
+      </div>
+      <div class="tab-panels">
+        <div class="tab-panel active" id="tab-uvx">
+          <pre><span class="cmd-prefix">$ </span>uvx trinops top</pre>
+        </div>
+        <div class="tab-panel" id="tab-pipx">
+          <pre><span class="cmd-prefix">$ </span>pipx run trinops top</pre>
+        </div>
+        <div class="tab-panel" id="tab-pip">
+          <pre><span class="cmd-prefix">$ </span>pip install trinops</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="cta-buttons">
+      <a href="/docs/getting-started/" class="btn btn-primary">
+        <svg viewBox="0 0 24 24"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
+        Get Started
+      </a>
+      <a href="https://github.com/lokkju/trinops" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.865 8.184 6.839 9.504.5.092.682-.217.682-.483 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.021C22 6.484 17.522 2 12 2z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </section>
+
+  <!-- Features section -->
+  <section class="snap-section features">
+    <p class="section-label">Features</p>
+    <h2 class="section-title">Everything you need, nothing you don't.</h2>
+    <p class="section-subtitle">trinops is a focused tool for engineers who live in the terminal and need to understand what's happening on their Trino cluster right now.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM5 10h9v2H5zm0-3h9v2H5zm0 6h6v2H5zm10 0l-2 2.56V13h2z"/></svg>
+        </div>
+        <h3 class="feature-title">Command Line</h3>
+        <p class="feature-desc">List queries, fetch details, kill runaway jobs, and manage your config without leaving the terminal. Every command outputs JSON for scripting.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+        </div>
+        <h3 class="feature-title">Live Dashboard</h3>
+        <p class="feature-desc">An htop-style TUI that shows every query on your cluster in real time. Sort, filter by user, drill into stats, and kill queries with a keystroke.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        </div>
+        <h3 class="feature-title">Schema Search</h3>
+        <p class="feature-desc">Refresh a local cache of your Trino catalog metadata, then search table and column names with glob patterns. No cluster connection needed at search time.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+        </div>
+        <h3 class="feature-title">Python Library</h3>
+        <p class="feature-desc">Wrap any trino-python-client cursor with <code>TrinoProgress</code> to get live progress bars, stderr output, or a local web dashboard for long-running queries.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Screenshots section -->
+  <section class="snap-section screenshots">
+    <p class="section-label">Screenshots</p>
+    <h2 class="section-title">See it in action.</h2>
+    <p class="section-subtitle">All views from a live Trino cluster, rendered in the terminal.</p>
+    <div class="screenshots-grid">
+      <div class="screenshot-item">
+        <img src="/screenshots/query-list.svg" alt="Query list with sort indicators" />
+        <p class="screenshot-caption">Query list with sort indicators</p>
+      </div>
+      <div class="screenshot-item">
+        <img src="/screenshots/detail-overview.svg" alt="Detail pane: Overview tab" />
+        <p class="screenshot-caption">Detail pane: Overview tab</p>
+      </div>
+      <div class="screenshot-item">
+        <img src="/screenshots/detail-stats.svg" alt="Detail pane: Stats tab" />
+        <p class="screenshot-caption">Detail pane: Stats tab</p>
+      </div>
+      <div class="screenshot-item">
+        <img src="/screenshots/kill-confirm.svg" alt="Kill confirmation dialog" />
+        <p class="screenshot-caption">Kill confirmation dialog</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick start section -->
+  <section class="snap-section quickstart">
+    <p class="section-label">Quick Start</p>
+    <h2 class="section-title">Up in three steps.</h2>
+    <p class="section-subtitle">No daemon, no config file required to try it — just point at your cluster and go.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-number">1</div>
+        <div>
+          <p class="step-title">Configure</p>
+          <p class="step-desc">Run the interactive setup wizard. It writes <code>~/.config/trinops/config.toml</code> with your server, scheme, user, and auth method.</p>
+          <pre class="step-code"><span class="cmd-prefix">$ </span>trinops config init</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">2</div>
+        <div>
+          <p class="step-title">Authenticate</p>
+          <p class="step-desc">For OAuth2 clusters, run the login flow once to cache your token. Other auth methods (basic, JWT, Kerberos) need no extra step.</p>
+          <pre class="step-code"><span class="cmd-prefix">$ </span>trinops auth login</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">3</div>
+        <div>
+          <p class="step-title">Go</p>
+          <p class="step-desc">Launch the live dashboard. It connects to your cluster, fetches running queries, and starts refreshing every 30 seconds.</p>
+          <pre class="step-code"><span class="cmd-prefix">$ </span>trinops top</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-brand">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M4 12V9C4 11.2 7.6 13 12 13S20 11.2 20 9V12C20 12.5 19.8 12.9 19.5 13.4C18.7 13.1 17.9 13 17 13C14.5 13 12.1 14.1 10.6 15.9C6.8 15.6 4 14 4 12M12 11C16.4 11 20 9.2 20 7S16.4 3 12 3 4 4.8 4 7 7.6 11 12 11M9.1 19.7L8.8 19L9.1 18.3C9.2 18.1 9.3 18 9.3 17.8C6.2 17.2 4 15.8 4 14V17C4 18.8 6.4 20.3 9.7 20.8C9.5 20.5 9.3 20.1 9.1 19.7M17 18C16.4 18 16 18.4 16 19S16.4 20 17 20 18 19.6 18 19 17.6 18 17 18M23 19C22.1 21.3 19.7 23 17 23S11.9 21.3 11 19C11.9 16.7 14.3 15 17 15S22.1 16.7 23 19M19.5 19C19.5 17.6 18.4 16.5 17 16.5S14.5 17.6 14.5 19 15.6 21.5 17 21.5 19.5 20.4 19.5 19Z" />
+      </svg>
+      trino.ps
+    </div>
+    <nav class="footer-links">
+      <a href="/docs/getting-started/">Getting Started</a>
+      <a href="/docs/tui/">TUI Dashboard</a>
+      <a href="/docs/schema/">Schema Search</a>
+      <a href="/docs/configuration/">Configuration</a>
+      <a href="/docs/cli/">CLI Reference</a>
+      <a href="/docs/library/">Python Library</a>
+      <a href="https://github.com/lokkju/trinops" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://pypi.org/project/trinops/" target="_blank" rel="noopener noreferrer">PyPI</a>
+    </nav>
+    <p class="footer-copy">Built by Loki Coyote &middot; A community tool for the <a href="https://trino.io" target="_blank" rel="noopener noreferrer">Trino</a> ecosystem</p>
+    <p class="footer-copy"><a href="https://polyformproject.org/licenses/shield/1.0.0/" target="_blank" rel="noopener noreferrer">PolyForm Shield 1.0.0</a></p>
+  </footer>
+
+  <script>
+    // Tab switching for install commands
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabPanels = document.querySelectorAll('.tab-panel');
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.tab;
+
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabPanels.forEach(p => p.classList.remove('active'));
+
+        btn.classList.add('active');
+        const panel = document.getElementById('tab-' + target);
+        if (panel) panel.classList.add('active');
+      });
+    });
+  </script>
+
+</body>
+</html>

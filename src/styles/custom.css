@@ -1,0 +1,29 @@
+/* trinops accent overrides for Starlight — keep it light, let Starlight breathe */
+
+:root {
+  --sl-color-accent-low: #2a1a3e;
+  --sl-color-accent: #dd00a1;
+  --sl-color-accent-high: #f060c8;
+  --sl-color-text-accent: #dd00a1;
+  --sl-font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+/* Sidebar active item */
+.sl-sidebar a[aria-current='page'] {
+  color: var(--sl-color-accent);
+  border-inline-start-color: var(--sl-color-accent);
+}
+
+/* Code blocks */
+code,
+pre,
+kbd {
+  font-family: var(--sl-font-mono);
+}
+
+/* Nav brand */
+.site-title {
+  color: var(--sl-color-accent) !important;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
