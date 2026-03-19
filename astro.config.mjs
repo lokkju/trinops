@@ -13,6 +13,11 @@ export default defineConfig({
 				{ icon: 'external', label: 'PyPI', href: 'https://pypi.org/project/trinops/' },
 			],
 			customCss: ['./src/styles/custom.css'],
+			head: [
+				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://trino.ps/hero.png' } },
+				{ tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
+				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://trino.ps/hero.png' } },
+			],
 			sidebar: [
 				{
 					label: 'Start Here',
